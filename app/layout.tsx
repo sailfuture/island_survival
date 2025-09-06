@@ -11,8 +11,8 @@ import { ConditionalLayout } from "@/components/conditional-layout"
 import { ClientSessionProvider } from "@/components/session-provider"
 
 export const metadata: Metadata = {
-  title: "Extraction Protocol: Code Black",
-  description: "Navigate critical extraction scenarios in this immersive decision-based experience",
+  title: "Edge of Survival",
+  description: "Navigate critical survival scenarios in this immersive island survival experience",
 }
 
 export default function RootLayout({

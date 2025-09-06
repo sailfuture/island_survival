@@ -32,7 +32,7 @@ const initialFormState: SettingsFormState = {
   crewCaptainName: "",
 }
 
-const API_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:N0QpoI29"
+const API_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
 
 interface SettingsFormProps {
   onFormSubmitSuccess: () => void
@@ -51,7 +51,7 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
       
       setIsFetchingSettings(true)
       try {
-        const response = await fetch(`${API_BASE_URL}/spacepiratesettings`)
+        const response = await fetch(`${API_BASE_URL}/island_survival_settings`)
         if (response.ok) {
           const data = await response.json()
           console.log('All settings data fetched:', data)
@@ -128,7 +128,7 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
 
         console.log('PATCH payload:', patchPayload)
         
-        const response = await fetch(`${API_BASE_URL}/spacepiratesettings/${currentUserSettings.id}`, {
+        const response = await fetch(`${API_BASE_URL}/island_survival_settings/${currentUserSettings.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(patchPayload),
@@ -161,7 +161,7 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
 
         console.log('POST payload:', postPayload)
         
-        const response = await fetch(`${API_BASE_URL}/spacepiratesettings`, {
+        const response = await fetch(`${API_BASE_URL}/island_survival_settings`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(postPayload),
@@ -204,13 +204,13 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 px-1 py-2 max-h-[70vh] overflow-y-auto">
       <div className="space-y-2">
-        <Label htmlFor="vesselName">Vessel Name</Label>
+        <Label htmlFor="vesselName">Survival Tribe Name</Label>
         <Input
           id="vesselName"
           name="vesselName"
           value={formState.vesselName}
           onChange={handleInputChange}
-          placeholder="e.g., The Star Wanderer"
+          placeholder="e.g., The Island Survivors"
           required
         />
       </div>

@@ -26,7 +26,7 @@ const authOptions: AuthOptions = {
 
         try {
           // Fetch allowed users from the database endpoint
-          const response = await fetch("https://xsc3-mvx7-r86m.n7e.xano.io/api:TfBSMVa_/allowed_users_story")
+          const response = await fetch("https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7/allowed_users_story")
           
           if (!response.ok) {
             console.error("Failed to fetch allowed users:", response.statusText)

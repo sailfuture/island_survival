@@ -40,7 +40,7 @@ export function Navigation() {
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center space-x-2">
-              <span className="text-xl font-bold">Extraction Protocol: Code Black</span>
+              <span className="text-xl font-bold">Edge of Survival</span>
               {process.env.NODE_ENV === 'development' && (
                 <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-mono">
                   DEV MODE
@@ -66,7 +66,7 @@ export function Navigation() {
                   <DialogHeader>
                     <DialogTitle>Crew Settings</DialogTitle>
                     <DialogDescription>
-                      Configure your crew details, vessel name, and team information. Changes will be saved to your profile.
+                      Configure your crew details, survival tribe name, and team information. Changes will be saved to your profile.
                     </DialogDescription>
                   </DialogHeader>
                   <SettingsForm onFormSubmitSuccess={handleSettingsSubmitSuccess} />

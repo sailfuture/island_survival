@@ -83,14 +83,14 @@ interface UserDecision {
   morale_after: number
   shipcondition_after: number
   resources_after: number
-  spacepiratenarratives_id: number
+  island_survival_stories_id: number
   complete: boolean
-  _spacepiratenarratives_singleitem?: NextChoice & {
+  _island_survival_stories_singleitem?: NextChoice & {
     from?: number[]
   }
 }
 
-const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:N0QpoI29"
+const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
 
 // Helper functions for stat calculations
 const roundToTwo = (num: number): number => {
@@ -238,7 +238,7 @@ export default function DecisionPage() {
       console.log('fetchData called for decision page:', params.id, 'user:', effectiveEmail)
       
       // Fetch decision data
-      const decisionResponse = await fetch(`${XANO_BASE_URL}/spacepiratenarratives/${params.id}`, {
+      const decisionResponse = await fetch(`${XANO_BASE_URL}/island_survival_stories/${params.id}`, {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -250,7 +250,7 @@ export default function DecisionPage() {
       setDecisionData(decision)
 
       // Fetch all decisions by the user
-      const userDecisionsResponse = await fetch(`${XANO_BASE_URL}/spacepirates`, {
+      const userDecisionsResponse = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -287,7 +287,7 @@ export default function DecisionPage() {
         console.log('Choice details:', {
           id: choiceMadeFromThisPage.id,
           decision_id: choiceMadeFromThisPage.decision_id,
-          spacepiratenarratives_id: choiceMadeFromThisPage.spacepiratenarratives_id,
+          island_survival_stories_id: choiceMadeFromThisPage.island_survival_stories_id,
           complete: choiceMadeFromThisPage.complete,
           previous_decision: choiceMadeFromThisPage.previous_decision,
           created_at: new Date(choiceMadeFromThisPage.created_at).toISOString()
@@ -440,7 +440,7 @@ export default function DecisionPage() {
       })
       console.log('=====================================')
 
-      // POST to Xano spacepirates endpoint
+      // POST to Xano island_survival_score endpoint
       const payload = {
         decision_id: selectedChoice.decision_id,  // The choice being made (destination)
         email: effectiveEmail,
@@ -451,11 +451,11 @@ export default function DecisionPage() {
         morale_after: newStats.morale,
         shipcondition_after: newStats.condition,
         resources_after: newStats.resources,
-        spacepiratenarratives_id: selectedNextDecision, // Destination narrative ID
+        island_survival_stories_id: selectedNextDecision, // Destination narrative ID
         complete: false  // Mark as incomplete - user has arrived but not made a choice yet
       }
 
-      const response = await fetch(`${XANO_BASE_URL}/spacepirates`, {
+      const response = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -476,7 +476,7 @@ export default function DecisionPage() {
         
         // Also update the current decision (where choice was made FROM) to mark it as complete
         // Find the existing record for the current decision page
-        const userMadeDecisions = await fetch(`${XANO_BASE_URL}/spacepirates`, {
+        const userMadeDecisions = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
@@ -486,14 +486,14 @@ export default function DecisionPage() {
         const allUserDecisions = await userMadeDecisions.json()
         
         const currentDecisionRecord = allUserDecisions.find((decision: UserDecision) => 
-          decision.spacepiratenarratives_id === parseInt(params.id as string) && 
+          decision.island_survival_stories_id === parseInt(params.id as string) && 
           decision.email === effectiveEmail
         )
         
         if (currentDecisionRecord) {
           console.log('Updating current decision record to complete:', currentDecisionRecord.id)
           try {
-            const updateResponse = await fetch(`${XANO_BASE_URL}/spacepirates/${currentDecisionRecord.id}`, {
+            const updateResponse = await fetch(`${XANO_BASE_URL}/island_survival_score/${currentDecisionRecord.id}`, {
               method: 'PATCH',
               headers: {
                 'Content-Type': 'application/json',
@@ -550,7 +550,7 @@ export default function DecisionPage() {
     try {
       // Call the dedicated start over API endpoint if it exists, otherwise manually delete
       try {
-        const startOverResponse = await fetch(`${XANO_BASE_URL}/spacepiratestartover`, {
+        const startOverResponse = await fetch(`${XANO_BASE_URL}/island_survival_startover`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -570,7 +570,7 @@ export default function DecisionPage() {
       }
       
       // Manual deletion fallback - get all user decisions and delete them
-      const response = await fetch(`${XANO_BASE_URL}/spacepirates`, {
+      const response = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -587,7 +587,7 @@ export default function DecisionPage() {
         // Delete each user decision
         for (const decision of userDecisions) {
           try {
-            const deleteResponse = await fetch(`${XANO_BASE_URL}/spacepirates/${decision.id}`, {
+            const deleteResponse = await fetch(`${XANO_BASE_URL}/island_survival_score/${decision.id}`, {
               method: 'DELETE',
             })
             
@@ -770,7 +770,7 @@ export default function DecisionPage() {
         <article className="mb-12">
           {/* Print-only header */}
           <div className="hidden print:block mb-8">
-            <div className="print-title">Extraction Protocol: Code Black</div>
+            <div className="print-title">Edge of Survival</div>
             <div className="print-subtitle">{decisionData.decision_title}</div>
             <h1 className="text-3xl font-bold mb-2 mt-4">{decisionData?.decision_title}</h1>
             {(decisionData?.decision_number ?? 0) > 0 && (
@@ -794,9 +794,9 @@ export default function DecisionPage() {
             <div className="grid md:grid-cols-2 gap-8">
               {decisionData.next.map((choice) => {
                 // Determine if this is the choice the user made FROM this page
-                // Compare: choice.id (where this choice leads) vs userDecisionFromThisPage.spacepiratenarratives_id (where user went)
+                // Compare: choice.id (where this choice leads) vs userDecisionFromThisPage.island_survival_stories_id (where user went)
                 const isSelectedChoice = isDecisionCompleted && userDecisionFromThisPage && 
-                  choice.id === userDecisionFromThisPage.spacepiratenarratives_id
+                  choice.id === userDecisionFromThisPage.island_survival_stories_id
                 const isOtherChoice = isDecisionCompleted && !isSelectedChoice
 
 
@@ -854,7 +854,7 @@ export default function DecisionPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center">
                     <Wrench className="h-4 w-4 mr-2" />
-                    Ship Condition
+                    Crew Health
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -866,13 +866,13 @@ export default function DecisionPage() {
                   </div>
                   <div className="flex items-center justify-between text-sm mb-2 font-mono">
                     <span className="text-muted-foreground">Change:</span>
-                    <span className={`font-bold ${(userDecisionFromThisPage._spacepiratenarratives_singleitem?.condition ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {userDecisionFromThisPage._spacepiratenarratives_singleitem?.condition === 0 ? '0%' : `${(userDecisionFromThisPage._spacepiratenarratives_singleitem?.condition ?? 0) >= 0 ? '+' : ''}${Math.round((userDecisionFromThisPage._spacepiratenarratives_singleitem?.condition ?? 0) * 100)}%`}
+                    <span className={`font-bold ${(userDecisionFromThisPage._island_survival_stories_singleitem?.condition ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {userDecisionFromThisPage._island_survival_stories_singleitem?.condition === 0 ? '0%' : `${(userDecisionFromThisPage._island_survival_stories_singleitem?.condition ?? 0) >= 0 ? '+' : ''}${Math.round((userDecisionFromThisPage._island_survival_stories_singleitem?.condition ?? 0) * 100)}%`}
                     </span>
                   </div>
-                  {userDecisionFromThisPage._spacepiratenarratives_singleitem?.condition_description && (
+                  {userDecisionFromThisPage._island_survival_stories_singleitem?.condition_description && (
                     <div className="text-xs text-muted-foreground mb-2 italic">
-                      {userDecisionFromThisPage._spacepiratenarratives_singleitem.condition_description}
+                      {userDecisionFromThisPage._island_survival_stories_singleitem.condition_description}
                     </div>
                   )}
                   <div className="flex items-center justify-between text-sm font-mono">
@@ -899,13 +899,13 @@ export default function DecisionPage() {
                   </div>
                   <div className="flex items-center justify-between text-sm mb-2 font-mono">
                     <span className="text-muted-foreground">Change:</span>
-                    <span className={`font-bold ${(userDecisionFromThisPage._spacepiratenarratives_singleitem?.morale ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {userDecisionFromThisPage._spacepiratenarratives_singleitem?.morale === 0 ? '0%' : `${(userDecisionFromThisPage._spacepiratenarratives_singleitem?.morale ?? 0) >= 0 ? '+' : ''}${Math.round((userDecisionFromThisPage._spacepiratenarratives_singleitem?.morale ?? 0) * 100)}%`}
+                    <span className={`font-bold ${(userDecisionFromThisPage._island_survival_stories_singleitem?.morale ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {userDecisionFromThisPage._island_survival_stories_singleitem?.morale === 0 ? '0%' : `${(userDecisionFromThisPage._island_survival_stories_singleitem?.morale ?? 0) >= 0 ? '+' : ''}${Math.round((userDecisionFromThisPage._island_survival_stories_singleitem?.morale ?? 0) * 100)}%`}
                     </span>
                   </div>
-                  {userDecisionFromThisPage._spacepiratenarratives_singleitem?.morale_description && (
+                  {userDecisionFromThisPage._island_survival_stories_singleitem?.morale_description && (
                     <div className="text-xs text-muted-foreground mb-2 italic">
-                      {userDecisionFromThisPage._spacepiratenarratives_singleitem.morale_description}
+                      {userDecisionFromThisPage._island_survival_stories_singleitem.morale_description}
                     </div>
                   )}
                   <div className="flex items-center justify-between text-sm font-mono">
@@ -932,13 +932,13 @@ export default function DecisionPage() {
                   </div>
                   <div className="flex items-center justify-between text-sm mb-2 font-mono">
                     <span className="text-muted-foreground">Change:</span>
-                    <span className={`font-bold ${(userDecisionFromThisPage._spacepiratenarratives_singleitem?.resources ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {userDecisionFromThisPage._spacepiratenarratives_singleitem?.resources === 0 ? '0' : `${(userDecisionFromThisPage._spacepiratenarratives_singleitem?.resources ?? 0) >= 0 ? '+' : ''}${userDecisionFromThisPage._spacepiratenarratives_singleitem?.resources ?? 0}`}
+                    <span className={`font-bold ${(userDecisionFromThisPage._island_survival_stories_singleitem?.resources ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {userDecisionFromThisPage._island_survival_stories_singleitem?.resources === 0 ? '0' : `${(userDecisionFromThisPage._island_survival_stories_singleitem?.resources ?? 0) >= 0 ? '+' : ''}${userDecisionFromThisPage._island_survival_stories_singleitem?.resources ?? 0}`}
                     </span>
                   </div>
-                  {userDecisionFromThisPage._spacepiratenarratives_singleitem?.resources_description && (
+                  {userDecisionFromThisPage._island_survival_stories_singleitem?.resources_description && (
                     <div className="text-xs text-muted-foreground mb-2 italic">
-                      {userDecisionFromThisPage._spacepiratenarratives_singleitem.resources_description}
+                      {userDecisionFromThisPage._island_survival_stories_singleitem.resources_description}
                     </div>
                   )}
                   <div className="flex items-center justify-between text-sm font-mono">
@@ -955,16 +955,16 @@ export default function DecisionPage() {
 
         {/* Reflection Questions - Only show for completed decisions */}
         {isDecisionCompleted && userDecisionFromThisPage && (
-          userDecisionFromThisPage._spacepiratenarratives_singleitem?.reflective_prompt_1 ||
-          userDecisionFromThisPage._spacepiratenarratives_singleitem?.reflective_prompt_2 ||
-          userDecisionFromThisPage._spacepiratenarratives_singleitem?.reflective_prompt_3 ||
-          userDecisionFromThisPage._spacepiratenarratives_singleitem?.reflective_prompt_4
+          userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_1 ||
+          userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_2 ||
+          userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_3 ||
+          userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_4
         ) && (
           <div className="mb-8">
             <h2 className="text-2xl font-bold mb-6 text-left">Reflection Questions</h2>
             <p className="text-muted-foreground mb-6">Take a moment to reflect on this pivotal moment in your journey.</p>
             <div className="space-y-4">
-              {userDecisionFromThisPage._spacepiratenarratives_singleitem?.reflective_prompt_1 && (
+              {userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_1 && (
                 <Card>
                   <CardContent className="p-4">
                     <div className="flex items-start space-x-3">
@@ -972,13 +972,13 @@ export default function DecisionPage() {
                         Question 1
                       </Badge>
                       <p className="text-sm leading-relaxed text-foreground flex-1">
-                        {userDecisionFromThisPage._spacepiratenarratives_singleitem.reflective_prompt_1}
+                        {userDecisionFromThisPage._island_survival_stories_singleitem.reflective_prompt_1}
                       </p>
                     </div>
                   </CardContent>
                 </Card>
               )}
-              {userDecisionFromThisPage._spacepiratenarratives_singleitem?.reflective_prompt_2 && (
+              {userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_2 && (
                 <Card>
                   <CardContent className="p-4">
                     <div className="flex items-start space-x-3">
@@ -986,13 +986,13 @@ export default function DecisionPage() {
                         Question 2
                       </Badge>
                       <p className="text-sm leading-relaxed text-foreground flex-1">
-                        {userDecisionFromThisPage._spacepiratenarratives_singleitem.reflective_prompt_2}
+                        {userDecisionFromThisPage._island_survival_stories_singleitem.reflective_prompt_2}
                       </p>
                     </div>
                   </CardContent>
                 </Card>
               )}
-              {userDecisionFromThisPage._spacepiratenarratives_singleitem?.reflective_prompt_3 && (
+              {userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_3 && (
                 <Card>
                   <CardContent className="p-4">
                     <div className="flex items-start space-x-3">
@@ -1000,13 +1000,13 @@ export default function DecisionPage() {
                         Question 3
                       </Badge>
                       <p className="text-sm leading-relaxed text-foreground flex-1">
-                        {userDecisionFromThisPage._spacepiratenarratives_singleitem.reflective_prompt_3}
+                        {userDecisionFromThisPage._island_survival_stories_singleitem.reflective_prompt_3}
                       </p>
                     </div>
                   </CardContent>
                 </Card>
               )}
-              {userDecisionFromThisPage._spacepiratenarratives_singleitem?.reflective_prompt_4 && (
+              {userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_4 && (
                 <Card>
                   <CardContent className="p-4">
                     <div className="flex items-start space-x-3">
@@ -1014,7 +1014,7 @@ export default function DecisionPage() {
                         Question 4
                       </Badge>
                       <p className="text-sm leading-relaxed text-foreground flex-1">
-                        {userDecisionFromThisPage._spacepiratenarratives_singleitem.reflective_prompt_4}
+                        {userDecisionFromThisPage._island_survival_stories_singleitem.reflective_prompt_4}
                       </p>
                     </div>
                   </CardContent>

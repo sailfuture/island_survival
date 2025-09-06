@@ -1,6 +1,6 @@
 # PowerShell script to set up .env.local file
 
-Write-Host "Setting up .env.local file for Extraction Protocol: Code Black..." -ForegroundColor Green
+Write-Host "Setting up .env.local file for Edge of Survival..." -ForegroundColor Green
 
 # Generate a random secret for NextAuth
 $randomBytes = New-Object byte[] 32

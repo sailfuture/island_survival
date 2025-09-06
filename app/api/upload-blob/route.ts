@@ -14,7 +14,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     xanoFormData.append('file', file)
 
     // Upload to Xano
-    const xanoResponse = await fetch('https://xsc3-mvx7-r86m.n7e.xano.io/api:N0QpoI29/upload/attachment', {
+    const xanoResponse = await fetch('https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7/upload/attachment', {
       method: 'POST',
       body: xanoFormData,
     })

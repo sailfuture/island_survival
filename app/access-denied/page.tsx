@@ -26,7 +26,7 @@ export default function AccessDeniedPage() {
               <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-red-800 dark:text-red-200">
                 <p className="font-medium mb-1">Authorization Required</p>
-                <p>Only authorized personnel can access the Extraction Protocol: Code Black command center.</p>
+                <p>Only authorized personnel can access the Edge of Survival command center.</p>
               </div>
             </div>
           </div>

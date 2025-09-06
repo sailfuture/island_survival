@@ -26,9 +26,11 @@ export default function CrewRolesPage() {
   useEffect(() => {
     async function fetchRoles() {
       try {
-        const response = await fetch("https://xsc3-mvx7-r86m.n7e.xano.io/api:N0QpoI29/spacepirates_roles")
+        const response = await fetch("https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7/island_survival_roles")
         const data = await response.json()
-        setRoles(data)
+        // Sort roles alphabetically by name
+        const sortedRoles = data.sort((a: CrewRole, b: CrewRole) => a.name.localeCompare(b.name))
+        setRoles(sortedRoles)
       } catch (error) {
         console.error("Failed to fetch roles:", error)
       } finally {
@@ -62,7 +64,7 @@ export default function CrewRolesPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight mb-2">Crew Roles</h1>
           <p className="text-muted-foreground">
-            Choose your role aboard the vessel and shape your destiny among the stars.
+            Choose your role on the island and shape your survival story.
           </p>
         </div>
 

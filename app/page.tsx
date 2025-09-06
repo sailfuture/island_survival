@@ -26,9 +26,9 @@ interface UserDecision {
   morale_after: number
   shipcondition_after: number
   resources_after: number
-  spacepiratenarratives_id: number
+  island_survival_stories_id: number
   complete: boolean
-  _spacepiratenarratives_singleitem: {
+  _island_survival_stories_singleitem: {
     id: number
     created_at: number
     decision_id: string
@@ -95,7 +95,7 @@ interface UserSettings {
   crew_captain_name: string
 }
 
-const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:N0QpoI29"
+const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
 
 // Helper functions for stat calculations - prevent floating point precision errors
 const roundToTwo = (num: number): number => {
@@ -179,8 +179,8 @@ export default function HomePage() {
     try {
       console.log('Starting fetchData for email:', email)
       
-      // Fetch user decisions from spacepirates endpoint
-      const spacePiratesResponse = await fetch(`${XANO_BASE_URL}/spacepirates`, {
+      // Fetch user decisions from island_survival_score endpoint
+      const spacePiratesResponse = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -195,8 +195,8 @@ export default function HomePage() {
       console.log('User decisions found:', userDecisions.length, 'for email:', email)
       setUserMadeDecisions(userDecisions)
 
-      // Fetch space pirate narratives
-      const narrativesResponse = await fetch(`${XANO_BASE_URL}/spacepiratenarratives`, {
+      // Fetch island survival stories
+      const narrativesResponse = await fetch(`${XANO_BASE_URL}/island_survival_stories`, {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -227,13 +227,13 @@ export default function HomePage() {
               morale_after: 0.8,
               shipcondition_after: 0.8,
               resources_after: 65,
-              spacepiratenarratives_id: startDecision.id,
+              island_survival_stories_id: startDecision.id,
               complete: false // START is available, not complete initially
             }
             
             console.log('Creating initial START decision with payload:', initialDecisionPayload)
             
-            const startDecisionResponse = await fetch(`${XANO_BASE_URL}/spacepirates`, {
+            const startDecisionResponse = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -263,7 +263,7 @@ export default function HomePage() {
         try {
           const initialSettingsPayload = {
             email: email,
-            vessel_name: "Set Ship Name",
+            vessel_name: "Set Survival Tribe Name",
             crew_name: "Set Crew Name",
             crew_leader_name: "Set Crew Leader Name",
             crew_captain_name: "Set Crew Captain Name"
@@ -271,7 +271,7 @@ export default function HomePage() {
           
           console.log('Creating initial settings with payload:', initialSettingsPayload)
           
-          const settingsResponse = await fetch(`${XANO_BASE_URL}/spacepiratesettings`, {
+          const settingsResponse = await fetch(`${XANO_BASE_URL}/island_survival_settings`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -285,7 +285,7 @@ export default function HomePage() {
             
             // Update local settings state
             setUserSettings({
-              vessel_name: createdSettings.vessel_name || "Set Ship Name",
+              vessel_name: createdSettings.vessel_name || "Set Survival Tribe Name",
               crew_name: createdSettings.crew_name || "Set Crew Name",
               crew_leader_name: createdSettings.crew_leader_name || "Set Crew Leader Name",
               crew_captain_name: createdSettings.crew_captain_name || "Set Crew Captain Name"
@@ -302,7 +302,7 @@ export default function HomePage() {
       
       // Fetch user settings
       try {
-        const settingsResponse = await fetch(`${XANO_BASE_URL}/spacepiratesettings`, {
+        const settingsResponse = await fetch(`${XANO_BASE_URL}/island_survival_settings`, {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
@@ -336,14 +336,14 @@ export default function HomePage() {
             // Auto-create settings for new users
             const defaultSettings = {
               email: email,
-              vessel_name: "USS Explorer",
+              vessel_name: "Island Survivors",
               crew_name: "",
               crew_leader_name: "",
               crew_captain_name: ""
             }
             
             try {
-              const createResponse = await fetch(`${XANO_BASE_URL}/spacepiratesettings`, {
+              const createResponse = await fetch(`${XANO_BASE_URL}/island_survival_settings`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -355,7 +355,7 @@ export default function HomePage() {
                 const createdSettings = await createResponse.json()
                 console.log('Default settings created:', createdSettings)
                 setUserSettings({
-                  vessel_name: createdSettings.vessel_name || "USS Explorer",
+                  vessel_name: createdSettings.vessel_name || "Island Survivors",
                   crew_name: createdSettings.crew_name || "",
                   crew_leader_name: createdSettings.crew_leader_name || "",
                   crew_captain_name: createdSettings.crew_captain_name || ""
@@ -446,8 +446,8 @@ export default function HomePage() {
             
             // Use the nested narrative data for the decision title
             let decisionTitle = "No recent activity"
-            if (latestDecision._spacepiratenarratives_singleitem?.decision_title) {
-              decisionTitle = latestDecision._spacepiratenarratives_singleitem.decision_title
+            if (latestDecision._island_survival_stories_singleitem?.decision_title) {
+              decisionTitle = latestDecision._island_survival_stories_singleitem.decision_title
             } else if (latestDecision.decision_description) {
               decisionTitle = latestDecision.decision_description
             } else {
@@ -567,7 +567,7 @@ export default function HomePage() {
     try {
       // Call the dedicated start over API endpoint if it exists, otherwise manually delete
       try {
-        const startOverResponse = await fetch(`${XANO_BASE_URL}/spacepiratestartover`, {
+        const startOverResponse = await fetch(`${XANO_BASE_URL}/island_survival_startover`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -596,7 +596,7 @@ export default function HomePage() {
       }
       
       // Manual deletion fallback - get all user decisions and delete them
-      const response = await fetch(`${XANO_BASE_URL}/spacepirates`, {
+      const response = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -613,7 +613,7 @@ export default function HomePage() {
         // Delete each user decision
         for (const decision of userDecisions) {
           try {
-            const deleteResponse = await fetch(`${XANO_BASE_URL}/spacepirates/${decision.id}`, {
+            const deleteResponse = await fetch(`${XANO_BASE_URL}/island_survival_score/${decision.id}`, {
               method: 'DELETE',
             })
             
@@ -714,22 +714,22 @@ export default function HomePage() {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight mb-2">Command Center</h1>
-          <p className="text-muted-foreground">Monitor your vessel's status and navigate your adventure.</p>
+          <p className="text-muted-foreground">Monitor your survival tribe's status and navigate your adventure.</p>
         </div>
 
-        {/* Vessel Information Cards */}
+        {/* Survival Tribe Information Cards */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">
-                Vessel Name
+                Survival Tribe Name
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-lg font-semibold">
-                {userSettings.vessel_name || "No vessel assigned"}
+                {userSettings.vessel_name || "No tribe name assigned"}
               </div>
-              <p className="text-xs text-muted-foreground mt-1 font-mono">Your starship designation</p>
+              <p className="text-xs text-muted-foreground mt-1 font-mono">Your survival tribe designation</p>
             </CardContent>
           </Card>
           <Card>
@@ -824,7 +824,7 @@ export default function HomePage() {
                 const userDecisionsByTime = [...userMadeDecisions].sort((a, b) => a.created_at - b.created_at)
                 
                 userDecisionsByTime.forEach(userDecision => {
-                  const narrative = sortedNarratives.find(n => n.id === userDecision.spacepiratenarratives_id)
+                  const narrative = sortedNarratives.find(n => n.id === userDecision.island_survival_stories_id)
                   if (narrative) {
                     // Show as completed if complete: true, or as available if it's START with complete: false
                     const isStartIncomplete = userDecision.decision_id === "START" && !userDecision.complete
@@ -974,7 +974,7 @@ export default function HomePage() {
         <div className="grid gap-6 md:grid-cols-3 mb-8">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Ship Condition</CardTitle>
+              <CardTitle className="text-sm font-medium">Crew Health</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold mb-2">
@@ -1008,16 +1008,16 @@ export default function HomePage() {
               <div className="text-2xl font-bold mb-2">
                 <span className={getStatusColor(currentPlayerStatus.resources)}>{currentPlayerStatus.resources}</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-2 font-mono">Fuel, supplies, and credits</p>
+              <p className="text-xs text-muted-foreground mt-2 font-mono">Food, Fresh Water, and Supplies</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Fleet Leaderboard */}
+        {/* Survival Leaderboard */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Fleet Leaderboard</CardTitle>
-            <CardDescription>Top commanders across the galaxy, ranked by overall status.</CardDescription>
+            <CardTitle>Survival Leaderboard</CardTitle>
+            <CardDescription>Top survivors on the island, ranked by overall status.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
