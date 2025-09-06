@@ -1,0 +1,78 @@
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { useState } from "react"
+import { signOut } from "next-auth/react"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { SettingsForm } from "./settings-form"
+
+export function Navigation() {
+  const pathname = usePathname()
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+
+  const navItems = [
+    { href: "/", label: "Home" },
+    { href: "/crew-roles", label: "Crew Roles" },
+  ]
+
+  const handleSettingsSubmitSuccess = () => {
+    setIsSettingsModalOpen(false)
+  }
+
+  const handleLogout = () => {
+    signOut({ callbackUrl: "/login" })
+  }
+
+  return (
+    <>
+      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="text-xl font-bold">Space Pirates</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              {navItems.map((item) => (
+                <Button key={item.href} variant={pathname === item.href ? "default" : "ghost"} asChild size="sm">
+                  <Link href={item.href} className="flex items-center space-x-2">
+                    <span>{item.label}</span>
+                  </Link>
+                </Button>
+              ))}
+              
+              <Dialog open={isSettingsModalOpen} onOpenChange={setIsSettingsModalOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="flex items-center space-x-2">
+                    <span>Settings</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[525px]">
+                  <DialogHeader>
+                    <DialogTitle>Crew Settings</DialogTitle>
+                    <DialogDescription>
+                      Configure your crew details, vessel name, and team information. Changes will be saved to your profile.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <SettingsForm onFormSubmitSuccess={handleSettingsSubmitSuccess} />
+                </DialogContent>
+              </Dialog>
+
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="flex items-center space-x-2">
+                <span>Logout</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </>
+  )
+}

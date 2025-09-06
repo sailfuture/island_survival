@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    --font-geist-sans: "GeistVF", sans-serif;
+    --font-geist-mono: "GeistMonoVF", monospace;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.font-mono {
+  font-family: var(--font-geist-mono);
+}
+
+/* Print Styles */
+@media print {
+  /* Hide navigation and other UI elements */
+  nav, .print\\:hidden, [class*="print:hidden"] {
+    display: none !important;
+  }
+  
+  /* Remove shadows and backgrounds for better printing */
+  *, *::before, *::after {
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+  
+  /* Ensure proper page breaks */
+  article, .decision-content {
+    page-break-inside: avoid;
+  }
+  
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+  
+  /* Set proper margins for print */
+  @page {
+    margin: 1in;
+  }
+  
+  body {
+    font-size: 12pt;
+    line-height: 1.4;
+    color: black !important;
+  }
+  
+  /* Show page title in print */
+  .print-title {
+    display: block !important;
+    font-size: 18pt;
+    font-weight: bold;
+    margin-bottom: 12pt;
+    text-align: center;
+    border-bottom: 1pt solid black;
+    padding-bottom: 6pt;
+  }
+  
+  .print-subtitle {
+    display: block !important;
+    font-size: 12pt;
+    text-align: center;
+    margin-bottom: 18pt;
+    font-style: italic;
+  }
+}
