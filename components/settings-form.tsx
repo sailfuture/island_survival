@@ -16,6 +16,18 @@ interface UserSettings {
   crew_name: string
   crew_captain_name: string
   vessel_name: string
+  role_1?: string
+  role_2?: string
+  role_3?: string
+  role_4?: string
+  role_5?: string
+  role_6?: string
+  role_7?: string
+  role_8?: string
+  role_9?: string
+  role_10?: string
+  role_11?: string
+  role_12?: string
 }
 
 interface SettingsFormState {
@@ -116,72 +128,51 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
     setIsLoading(true)
 
     try {
-      if (currentUserSettings) {
-        // Update existing settings using PATCH
-        const patchPayload = {
-          email: userEmail,
-          crew_leader_name: formState.crewLeaderName,
-          crew_name: formState.crewName,
-          crew_captain_name: formState.crewCaptainName,
-          vessel_name: formState.vesselName,
-        }
+      // Use the same update_settings endpoint as crew roles page
+      const updatePayload = {
+        user_email: userEmail,
+        crew_leader_name: formState.crewLeaderName,
+        crew_name: formState.crewName,
+        crew_captain_name: formState.crewCaptainName,
+        vessel_name: formState.vesselName,
+        island_survival_settings2: currentUserSettings?.id || 0,
+        // Preserve existing role assignments
+        role_1: currentUserSettings?.role_1 || '',
+        role_2: currentUserSettings?.role_2 || '',
+        role_3: currentUserSettings?.role_3 || '',
+        role_4: currentUserSettings?.role_4 || '',
+        role_5: currentUserSettings?.role_5 || '',
+        role_6: currentUserSettings?.role_6 || '',
+        role_7: currentUserSettings?.role_7 || '',
+        role_8: currentUserSettings?.role_8 || '',
+        role_9: currentUserSettings?.role_9 || '',
+        role_10: currentUserSettings?.role_10 || '',
+        role_11: currentUserSettings?.role_11 || '',
+        role_12: currentUserSettings?.role_12 || '',
+      }
 
-        console.log('PATCH payload:', patchPayload)
+      console.log('Settings form - UPDATE payload:', updatePayload)
+      
+      const response = await fetch(`${API_BASE_URL}/update_settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatePayload),
+      })
+
+      if (response.ok) {
+        const updatedSettings = await response.json()
+        console.log('Settings updated successfully via update_settings:', updatedSettings)
+        toast.success("Settings updated successfully!")
+        onFormSubmitSuccess()
         
-        const response = await fetch(`${API_BASE_URL}/island_survival_settings/${currentUserSettings.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patchPayload),
-        })
-
-        if (response.ok) {
-          const updatedSettings = await response.json()
-          console.log('Settings updated successfully:', updatedSettings)
-          toast.success("Settings updated successfully!")
-          onFormSubmitSuccess()
-          
-          // Refresh the page to update all settings data
-          setTimeout(() => {
-            window.location.reload()
-          }, 1000)
-        } else {
-          const errorText = await response.text()
-          console.error('PATCH failed:', response.status, errorText)
-          throw new Error(`Failed to update settings: ${response.statusText}`)
-        }
+        // Refresh the page to update all settings data
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
       } else {
-        // Create new settings using POST
-        const postPayload = {
-          email: userEmail,
-          crew_leader_name: formState.crewLeaderName,
-          crew_name: formState.crewName,
-          crew_captain_name: formState.crewCaptainName,
-          vessel_name: formState.vesselName,
-        }
-
-        console.log('POST payload:', postPayload)
-        
-        const response = await fetch(`${API_BASE_URL}/island_survival_settings`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(postPayload),
-        })
-
-        if (response.ok) {
-          const createdSettings = await response.json()
-          console.log('Settings created successfully:', createdSettings)
-          toast.success("Settings created successfully!")
-          onFormSubmitSuccess()
-          
-          // Refresh the page to update all settings data
-          setTimeout(() => {
-            window.location.reload()
-          }, 1000)
-        } else {
-          const errorText = await response.text()
-          console.error('POST failed:', response.status, errorText)
-          throw new Error(`Failed to create settings: ${response.statusText}`)
-        }
+        const errorText = await response.text()
+        console.error('update_settings failed:', response.status, errorText)
+        throw new Error(`Failed to update settings: ${response.statusText}`)
       }
     } catch (error) {
       console.error("Error submitting settings:", error)

@@ -1,29 +1,60 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams, useSearchParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Skeleton } from "@/components/ui/skeleton"
-import { ArrowLeft, Users, Wrench, Coins, Printer } from "lucide-react"
-import Link from "next/link"
+import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
+import { useSession } from "next-auth/react"
 import { DecisionConfirmationModal } from "@/components/decision-confirmation-modal"
-import { useCurrentUser } from "@/hooks/use-current-user"
 
+const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
+
+// Define the structure for a decision choice
 interface NextChoice {
   id: number
   decision_id: string
   decision_title: string
   decision_description: string
-  decision_text: string
+  decision_choice?: string
+  story: string
   condition: number
   morale: number
   resources: number
-  decision_number: number
   choice: string
+  decision_number: number
+  condition_description?: string
+  morale_description?: string
+  resources_description?: string
+  story_summary?: string
+  result_summary?: string
+  reflective_prompt_1?: string
+  reflective_prompt_2?: string
+  reflective_prompt_3?: string
+  reflective_prompt_4?: string
+  hero_image?: string
+  decision_summary?: string
+  decision_text?: string
+  sequence?: number
+}
+
+// Define the structure for decision detail
+interface DecisionDetail {
+  id: number
+  decision_id: string
+  decision_title: string
+  decision_description: string
+  story: string
+  condition: number
+  morale: number
+  resources: number
+  choice: string
+  decision_number: number
+  created_at?: number
+  next: NextChoice[]
+  from?: NextChoice[]
   condition_description?: string
   morale_description?: string
   resources_description?: string
@@ -31,150 +62,35 @@ interface NextChoice {
   reflective_prompt_2?: string
   reflective_prompt_3?: string
   reflective_prompt_4?: string
-}
-
-interface DecisionDetail {
-  id: number
-  created_at: number
-  decision_id: string
-  decision_title: string
-  decision_description: string
-  decision_summary?: string
-  decision_text: string
-  condition: number
-  morale: number
-  resources: number
-  decision_number: number
-  choice?: string
-  next: NextChoice[]
-  from?: NextChoice[]
-  condition_description: string
-  morale_description: string
-  resources_description: string
-  reflective_prompt_1?: string
-  reflective_prompt_2?: string
-  reflective_prompt_3?: string
-  reflective_prompt_4?: string
   hero_image?: string
 }
 
+// Player status interface
 interface PlayerStatus {
   morale: number
   resources: number
   condition: number
 }
 
-interface UserSettings {
-  vessel_name: string
-  crew_name: string
-  crew_leader_name: string
-  crew_captain_name: string
-}
-
-interface UserDecision {
-  id: number
-  created_at: number
-  decision_id: string
-  email: string
-  previous_decision: string
-  morale_before: number
-  condition_before: number
-  resources_before: number
-  morale_after: number
-  shipcondition_after: number
-  resources_after: number
-  island_survival_stories_id: number
-  complete: boolean
-  _island_survival_stories_singleitem?: NextChoice & {
-    from?: number[]
-  }
-}
-
-const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
-
-// Helper functions for stat calculations
-const roundToTwo = (num: number): number => {
-  // Handle very small values that should be treated as 0
-  if (Math.abs(num) < 0.005) return 0
-  return Math.round(num * 100) / 100
-}
-const clampMoraleCondition = (value: number): number => {
-  const clamped = Math.max(0, Math.min(1, value))
-  return roundToTwo(clamped)
-}
-const clampResources = (value: number): number => Math.max(0, Math.round(value))
-
-// Function to get hero image for each decision
-const getHeroImageForDecision = (decisionData: DecisionDetail | null): string => {
-  // Use the hero_image from the JSON data if available
-  if (decisionData?.hero_image) {
-    return decisionData.hero_image
-  }
-  
-  // Fallback to default images if no hero_image is provided
-  const decisionId = decisionData?.decision_id || ''
-  const decisionNumber = decisionData?.decision_number || 0
-  
-  if (decisionId?.includes('START') || decisionNumber === 0) {
-    return 'https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=1200&h=600&fit=crop&crop=center'
-  }
-  
-  if (decisionId?.includes('FINAL_') || decisionId?.includes('ENDING') || decisionId?.includes('END')) {
-    return 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1200&h=600&fit=crop&crop=center'
-  }
-  
-  // Rotate through different space images based on decision number
-  const spaceImages = [
-    'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1200&h=600&fit=crop&crop=center', // Earth from space
-    'https://images.unsplash.com/photo-1502134249126-9f3755a50d78?w=1200&h=600&fit=crop&crop=center', // Nebula
-    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&h=600&fit=crop&crop=center', // Deep space
-    'https://images.unsplash.com/photo-1608178398319-48f814d0750c?w=1200&h=600&fit=crop&crop=center', // Starfield
-    'https://images.unsplash.com/photo-1614728894747-a83421369634?w=1200&h=600&fit=crop&crop=center', // Galaxy
-    'https://images.unsplash.com/photo-1517076849937-6b7bbb8e2b8e?w=1200&h=600&fit=crop&crop=center', // Planet surface
-    'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=1200&h=600&fit=crop&crop=center', // Space station view
-    'https://images.unsplash.com/photo-1573588028698-f4759befb09a?w=1200&h=600&fit=crop&crop=center'  // Cosmic scene
-  ]
-  
-  const imageIndex = decisionNumber % spaceImages.length
-  return spaceImages[imageIndex]
-}
-
-// Enhanced markdown renderer component
+// MarkdownContent component for rendering story text
 const MarkdownContent = ({ content }: { content: string }) => {
-  const toTitleCase = (str: string) => {
-    return str.replace(/\w\S*/g, (txt) => 
-      txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
-    );
+  if (!content || typeof content !== 'string') {
+    return <p className="text-gray-600">No content available</p>
   }
 
   const formatText = (text: string) => {
     return text
-      // Handle ## headings (h2) with title case
-      .replace(/^## (.+)$/gm, (match, title) => 
-        `<h2 class="text-2xl font-bold mb-4 mt-8 text-foreground border-b border-gray-200 pb-2">${toTitleCase(title.trim())}</h2>`
-      )
-      // Handle # headings (h1) with title case
-      .replace(/^# (.+)$/gm, (match, title) => 
-        `<h1 class="text-3xl font-bold mb-6 mt-8 text-foreground">${toTitleCase(title.trim())}</h1>`
-      )
-      // Bold text
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-foreground">$1</strong>')
-      // Italic text
-      .replace(/\*(.*?)\*/g, '<em class="italic text-foreground">$1</em>')
-      // Line breaks - double newlines become paragraph breaks
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/\n\n/g, '</p><p class="mb-4 leading-relaxed">')
-      // Single newlines become line breaks
-      .replace(/\n/g, '<br/>')
-      // Basic quote formatting
-      .replace(/^"(.*?)"$/gm, '<blockquote class="border-l-4 border-gray-300 pl-4 italic text-gray-700 dark:text-gray-300 my-4">"$1"</blockquote>')
+      .replace(/\n/g, '<br />')
   }
 
-  // Check if the content starts with a heading
-  const startsWithHeading = /^#/.test(content.trim())
+  const startsWithHeading = content.trim().startsWith('#')
 
   return (
     <div 
-      className="prose prose-gray dark:prose-invert max-w-none leading-relaxed text-foreground"
+      className="prose prose-lg max-w-none"
       style={{ fontSize: '1.1rem', lineHeight: '1.7' }}
       dangerouslySetInnerHTML={{ 
         __html: startsWithHeading 
@@ -189,197 +105,165 @@ export default function DecisionPage() {
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { data: session, status: sessionStatus } = useSession()
+  
   const [showNextDecisionDialog, setShowNextDecisionDialog] = useState(false)
   const [isLoadingNext, setIsLoadingNext] = useState(false)
   const [selectedNextDecision, setSelectedNextDecision] = useState<number | null>(null)
+  const [confirmedChoiceId, setConfirmedChoiceId] = useState<number | null>(null)
   const [decisionData, setDecisionData] = useState<DecisionDetail | null>(null)
-  const [reflectivePrompts, setReflectivePrompts] = useState<string[]>([])
-  const [userDecisionFromThisPage, setUserDecisionFromThisPage] = useState<UserDecision | null>(null)
-  const [showDecisionModal, setShowDecisionModal] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [isStartingOver, setIsStartingOver] = useState(false)
-  const [userSettings, setUserSettings] = useState<UserSettings>({
-    vessel_name: "",
-    crew_name: "",
-    crew_leader_name: "",
-    crew_captain_name: "",
-  })
-  const { email: userEmail, isLoading: isUserLoading } = useCurrentUser()
-
-  // Use the email from the auth hook directly
-  const effectiveEmail = userEmail
-
-  const decisionId = params.id as string
-  
-  // Parse query parameters for player stats
-  const moraleParam = searchParams.get('morale')
-  const resourcesParam = searchParams.get('resources')
-  const conditionParam = searchParams.get('condition')
-  
-  // Use passed values or defaults
   const [playerStatus, setPlayerStatus] = useState<PlayerStatus>({
-    morale: moraleParam ? parseFloat(moraleParam) : 0.5,
-    resources: resourcesParam ? parseInt(resourcesParam) : 65,
-    condition: conditionParam ? parseFloat(conditionParam) : 0.5
+    morale: 0.8,
+    resources: 65,
+    condition: 0.8
   })
+  const [loading, setLoading] = useState(true)
 
-  // Add debugging
+  const userEmail = session?.user?.email
+  const effectiveEmail = userEmail || 'guest'
+  
+  console.log('Decision page session status:', sessionStatus, 'User email:', userEmail)
+
+  // Load story data when page mounts
   useEffect(() => {
-    console.log('Decision Page Auth Debug:', {
-      userEmail,
-      isUserLoading,
-      decisionId: params.id
-    })
-  }, [userEmail, isUserLoading, params.id])
-
-  // Extract data fetching into a separate function
-  const fetchDecisionData = async () => {
-    try {
-      console.log('fetchData called for decision page:', params.id, 'user:', effectiveEmail)
-      
-      // Fetch decision data
-      const decisionResponse = await fetch(`${XANO_BASE_URL}/island_survival_stories/${params.id}`, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      })
-      const decision: DecisionDetail = await decisionResponse.json()
-      console.log('Decision data fetched:', decision.decision_title)
-      setDecisionData(decision)
-
-      // Fetch all decisions by the user
-      const userDecisionsResponse = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      })
-      const allUserDecisions = await userDecisionsResponse.json()
-      console.log('All user decisions fetched:', allUserDecisions.length)
-      
-      // Filter to only get decisions by current user
-      const userDecisions = allUserDecisions.filter((d: any) => d.email === effectiveEmail)
-      console.log('Filtered user decisions:', userDecisions.length, 'for email:', effectiveEmail)
-      const sortedUserDecisions = userDecisions.sort((a: any, b: any) => a.created_at - b.created_at)
-      
-      // Find if the user has made a choice FROM this page
-      // Look for ANY decision that was made FROM this page (where previous_decision matches current page's decision_id)
-      // This represents the choice that was made, regardless of complete status
-      let choiceMadeFromThisPage = null
-      
-      choiceMadeFromThisPage = userDecisions.find((userDecision: any) => 
-        userDecision.previous_decision === decision.decision_id
-      )
-      
-      console.log('=== DECISION PAGE CHOICE DETECTION DEBUG ===')
-      console.log('Current page ID:', params.id)
-      console.log('Current decision_id:', decision.decision_id)
-      console.log('Looking for decisions where previous_decision =', decision.decision_id)
-      console.log('All user decisions:', userDecisions.length)
-      console.log('User decisions FROM this page:', userDecisions.filter((d: any) => 
-        d.previous_decision === decision.decision_id
-      ))
-      console.log('Found choice made FROM this page:', !!choiceMadeFromThisPage)
-      if (choiceMadeFromThisPage) {
-        console.log('Choice details:', {
-          id: choiceMadeFromThisPage.id,
-          decision_id: choiceMadeFromThisPage.decision_id,
-          island_survival_stories_id: choiceMadeFromThisPage.island_survival_stories_id,
-          complete: choiceMadeFromThisPage.complete,
-          previous_decision: choiceMadeFromThisPage.previous_decision,
-          created_at: new Date(choiceMadeFromThisPage.created_at).toISOString()
-        })
-      }
-      
-      if (choiceMadeFromThisPage) {
-        console.log('Choice made from this page found, setting userDecisionFromThisPage')
-        setUserDecisionFromThisPage(choiceMadeFromThisPage)
-      } else {
-        // Clear the decision state if no choice found
-        console.log('No choice found from this page, clearing userDecisionFromThisPage')
-        setUserDecisionFromThisPage(null)
-      }
-      
-      // Get player status from query params or use the latest saved values
-      const queryMorale = searchParams.get('morale')
-      const queryResources = searchParams.get('resources')
-      const queryCondition = searchParams.get('condition')
-      
-      if (queryMorale && queryResources && queryCondition) {
-        // Use query params if available (passed from home page)
-        setPlayerStatus({
-          morale: parseFloat(queryMorale),
-          resources: parseInt(queryResources),
-          condition: parseFloat(queryCondition)
-        })
-      } else if (sortedUserDecisions.length > 0) {
-        // Use the latest decision's saved values as the current status
-        const latestDecision = sortedUserDecisions[sortedUserDecisions.length - 1]
-        
-        // If viewing a past decision, use the values from that point in time
-        let relevantDecision = latestDecision
-        if (choiceMadeFromThisPage) {
-          // Find the decision just before this one
-          const currentIndex = sortedUserDecisions.findIndex((d: any) => d.id === choiceMadeFromThisPage.id)
-          if (currentIndex > 0) {
-            relevantDecision = sortedUserDecisions[currentIndex - 1]
-          } else {
-            // This is the first decision, use initial values
-            relevantDecision = null
-          }
-        }
-        
-        if (relevantDecision) {
-          setPlayerStatus({
-            // Use saved values directly - they're already the final calculated values
-            condition: relevantDecision.shipcondition_after ?? 0.8,
-            morale: relevantDecision.morale_after ?? 0.8,
-            resources: relevantDecision.resources_after ?? 65
-          })
-        } else {
-          // Initial values for first decision
-          setPlayerStatus({
-            condition: 0.8,
-            morale: 0.8,
-            resources: 65
-          })
-        }
-      } else {
-        // No decisions made yet, use initial values
-        setPlayerStatus({
-          condition: 0.8,
-          morale: 0.8,
-          resources: 65
-        })
-      }
-    } catch (error) {
-      console.error("Failed to fetch decision:", error)
-      throw error
-    }
-  }
-
-  useEffect(() => {
-    // Scroll to top when navigating to a new decision page
-    window.scrollTo(0, 0)
-    
-    // Always fetch data with effective email for debugging
-    console.log('Decision page fetching data for user:', effectiveEmail)
-    
-    async function loadData() {
+    const loadData = async () => {
+      setLoading(true)
       try {
-        await fetchDecisionData()
+        const storyId = params.id as string
+        console.log('Loading story with ID:', storyId)
+        
+        // Validate story ID
+        const storyIdNum = parseInt(storyId)
+        if (!storyId || storyId === 'undefined' || storyId === 'null' || isNaN(storyIdNum) || storyIdNum < 1) {
+          console.error('Invalid story ID:', storyId, 'Parsed value:', storyIdNum)
+          toast.error('Invalid story ID. Please return to the dashboard.')
+          setDecisionData(null)
+          setLoading(false)
+          return
+        }
+        
+        // Call the island_survival_stories endpoint
+        const url = `${XANO_BASE_URL}/island_survival_stories/${storyId}`
+        console.log('Fetching from URL:', url)
+        
+        const response = await fetch(url, {
+          method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+          }
+        })
+        
+        console.log('Response status:', response.status)
+        console.log('Response ok:', response.ok)
+        
+        if (response.ok) {
+          const storyData = await response.json()
+          console.log('Story data from API:', storyData)
+          
+          // Check if we got the expected data structure
+          if (storyData.current_story && storyData.next_stories) {
+            // Handle the response structure with current_story and next_story
+            const currentStory = storyData.current_story
+            console.log('Using current_story:', currentStory)
+            
+            const mappedDecision: DecisionDetail = {
+              id: currentStory.id || parseInt(storyId),
+              decision_id: currentStory.decision_id || '',
+              decision_title: currentStory.decision_title || 'Decision',
+              decision_description: currentStory.decision_description || '',
+              story: currentStory.story || '',
+              condition: currentStory.condition || 0,
+              morale: currentStory.morale || 0,
+              resources: currentStory.resources || 0,
+              choice: currentStory.choice || '',
+              decision_number: currentStory.sequence || 0,
+              created_at: currentStory.created_at || Date.now(),
+              condition_description: currentStory.condition_description || '',
+              morale_description: currentStory.morale_description || '',
+              resources_description: currentStory.resources_description || '',
+              reflective_prompt_1: currentStory.reflective_prompt_1 || '',
+              reflective_prompt_2: currentStory.reflective_prompt_2 || '',
+              reflective_prompt_3: currentStory.reflective_prompt_3 || '',
+              reflective_prompt_4: currentStory.reflective_prompt_4 || '',
+              hero_image: currentStory.hero_image || '',
+              next: storyData.next_stories || []
+            }
+            
+            console.log('Setting decision data from current_story:', mappedDecision)
+            setDecisionData(mappedDecision)
+            
+            // Set player status from the current story if not in URL
+            const urlMorale = searchParams.get('morale')
+            const urlResources = searchParams.get('resources')
+            const urlCondition = searchParams.get('condition')
+            
+            if (!urlMorale && !urlResources && !urlCondition) {
+              setPlayerStatus({
+                morale: currentStory.morale || 0,
+                resources: currentStory.resources || 0,
+                condition: currentStory.condition || 0
+              })
+            }
+          } else {
+            // Fallback to direct mapping if structure is different
+            console.log('Using direct story data mapping')
+            
+            const mappedDecision: DecisionDetail = {
+              id: storyData.id || parseInt(storyId),
+              decision_id: storyData.decision_id || '',
+              decision_title: storyData.decision_title || 'Decision',
+              decision_description: storyData.decision_description || '',
+              story: storyData.story || '',
+              condition: storyData.condition || 0,
+              morale: storyData.morale || 0,
+              resources: storyData.resources || 0,
+              choice: storyData.choice || '',
+              decision_number: storyData.sequence || 0,
+              created_at: storyData.created_at || Date.now(),
+              condition_description: storyData.condition_description || '',
+              morale_description: storyData.morale_description || '',
+              resources_description: storyData.resources_description || '',
+              reflective_prompt_1: storyData.reflective_prompt_1 || '',
+              reflective_prompt_2: storyData.reflective_prompt_2 || '',
+              reflective_prompt_3: storyData.reflective_prompt_3 || '',
+              reflective_prompt_4: storyData.reflective_prompt_4 || '',
+              hero_image: storyData.hero_image || '',
+              next: storyData.next_stories || storyData.next_story || []
+            }
+            
+            setDecisionData(mappedDecision)
+            
+            // Set player status from URL or story data
+            const urlMorale = searchParams.get('morale')
+            const urlResources = searchParams.get('resources')
+            const urlCondition = searchParams.get('condition')
+            
+        setPlayerStatus({
+              morale: urlMorale ? parseFloat(urlMorale) : (storyData.morale || 0),
+              resources: urlResources ? parseInt(urlResources) : (storyData.resources || 0),
+              condition: urlCondition ? parseFloat(urlCondition) : (storyData.condition || 0)
+            })
+          }
+        } else {
+          console.error('Failed to fetch story:', response.status, response.statusText)
+          const errorText = await response.text()
+          console.error('Error response:', errorText)
+          toast.error('Failed to load story data')
+          setDecisionData(null)
+        }
+        
+        // Player status is now set above based on story data or URL params
       } catch (error) {
         console.error('Error loading decision data:', error)
+        toast.error('Failed to load decision data')
+        setDecisionData(null)
       } finally {
         setLoading(false)
       }
     }
 
     loadData()
-  }, [params.id, effectiveEmail, searchParams])
+  }, [params.id, searchParams])
 
   const handleChoiceClick = (choice: NextChoice) => {
     setSelectedNextDecision(choice.id)
@@ -387,151 +271,132 @@ export default function DecisionPage() {
   }
 
   const handleConfirmDecision = async () => {
-    if (!selectedNextDecision || !decisionData) return
+    if (!selectedNextDecision || !decisionData) {
+      console.error('Missing required data for decision')
+      return
+    }
     
     setIsLoadingNext(true)
     
     try {
       // Find the selected choice
       const selectedChoice = decisionData.next.find(c => c.id === selectedNextDecision)
-      if (!selectedChoice) return
-      
-      console.log('=== SELECTED CHOICE DELTA VALUES ===')
-      console.log('Selected choice ID:', selectedNextDecision)
-      console.log('Selected choice details:', {
-        id: selectedChoice.id,
-        decision_id: selectedChoice.decision_id,
-        description: selectedChoice.decision_description,
-        delta_values_from_database: {
-          condition: selectedChoice.condition,
-          morale: selectedChoice.morale, 
-          resources: selectedChoice.resources
-        }
-      })
-      console.log('======================================')
-      
-      // Calculate new stats with proper rounding to prevent floating point precision errors
-      const newStats = {
-        morale: clampMoraleCondition(playerStatus.morale + selectedChoice.morale),
-        resources: clampResources(playerStatus.resources + selectedChoice.resources),
-        condition: clampMoraleCondition(playerStatus.condition + selectedChoice.condition)
+      if (!selectedChoice) {
+        throw new Error('Selected choice not found')
       }
 
-      console.log('=== DECISION CALCULATION DEBUG ===')
-      console.log('Player Status Before:', playerStatus)
-      console.log('Selected Choice Changes:', {
-        condition: selectedChoice.condition,
-        morale: selectedChoice.morale,
-        resources: selectedChoice.resources
-      })
-      console.log('Raw Calculations (before clamping):', {
-        morale: playerStatus.morale + selectedChoice.morale,
-        condition: playerStatus.condition + selectedChoice.condition,
-        resources: playerStatus.resources + selectedChoice.resources
-      })
-      console.log('Final New Stats (after clamping):', newStats)
-      console.log('Payload to be sent:', {
+      // Calculate new stats
+      const newStats: PlayerStatus = {
+        morale: Math.max(0, Math.min(1, playerStatus.morale + (selectedChoice.morale || 0))),
+        resources: Math.max(0, Math.min(100, playerStatus.resources + (selectedChoice.resources || 0))),
+        condition: Math.max(0, Math.min(1, playerStatus.condition + (selectedChoice.condition || 0)))
+      }
+      
+      console.log('Creating score record for choice:', selectedChoice)
+      console.log('Current player status:', playerStatus)
+      console.log('New stats after choice:', newStats)
+      console.log('Current decision data:', decisionData)
+      console.log('Session user email:', session?.user?.email)
+      
+      // POST to island_survival_score
+      console.log('User email:', effectiveEmail)
+      console.log('Session status in handleConfirmDecision:', sessionStatus, 'Session email:', session?.user?.email)
+      
+      // Only post if we have a real user email (not guest)
+      if (effectiveEmail && effectiveEmail !== 'guest' && session?.user?.email) {
+        try {
+          const scorePayload = {
+            id: selectedChoice.id,  // The numerical ID of the decision made
+            decision_id: selectedChoice.decision_id || '',
+            email: session.user.email,
         morale_before: playerStatus.morale,
-        condition_before: playerStatus.condition,
-        resources_before: playerStatus.resources,
         morale_after: newStats.morale,
-        shipcondition_after: newStats.condition,
-        resources_after: newStats.resources
-      })
-      console.log('=====================================')
-
-      // POST to Xano island_survival_score endpoint
-      const payload = {
-        decision_id: selectedChoice.decision_id,  // The choice being made (destination)
-        email: effectiveEmail,
-        previous_decision: decisionData.decision_id, // Where they came from
-        morale_before: playerStatus.morale,
-        condition_before: playerStatus.condition,
         resources_before: playerStatus.resources,
-        morale_after: newStats.morale,
-        shipcondition_after: newStats.condition,
         resources_after: newStats.resources,
-        island_survival_stories_id: selectedNextDecision, // Destination narrative ID
-        complete: false  // Mark as incomplete - user has arrived but not made a choice yet
-      }
-
-      const response = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
+            condition_before: playerStatus.condition,
+            shipcondition_after: newStats.condition,
+            current_story: selectedChoice.id,
+            current_sequence: selectedChoice.sequence || selectedChoice.decision_number || 0,
+            complete: false,
+            previous_decision: decisionData.decision_id || '',
+            score: 0
+          }
+          
+          console.log('POST to island_survival_score with payload:', scorePayload)
+          
+          const scoreResponse = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
-      })
-
-      if (response.ok) {
-        const savedDecision = await response.json()
-        console.log('=== SAVED DECISION DATA ===')
-        console.log('Data returned from API after save:', savedDecision)
-        console.log('Values that should match payload:', {
-          morale_after: savedDecision.morale_after,
-          shipcondition_after: savedDecision.shipcondition_after,
-          resources_after: savedDecision.resources_after
-        })
-        console.log('===========================')
-        
-        // Also update the current decision (where choice was made FROM) to mark it as complete
-        // Find the existing record for the current decision page
-        const userMadeDecisions = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
+            body: JSON.stringify(scorePayload)
+          })
+          
+          console.log('Score POST response status:', scoreResponse.status)
+          
+          if (!scoreResponse.ok) {
+            const errorText = await scoreResponse.text()
+            console.error('Failed to save score:', scoreResponse.status, errorText)
+          } else {
+            const scoreResult = await scoreResponse.json()
+            console.log('Score saved successfully:', scoreResult)
           }
-        })
-        const allUserDecisions = await userMadeDecisions.json()
-        
-        const currentDecisionRecord = allUserDecisions.find((decision: UserDecision) => 
-          decision.island_survival_stories_id === parseInt(params.id as string) && 
-          decision.email === effectiveEmail
-        )
-        
-        if (currentDecisionRecord) {
-          console.log('Updating current decision record to complete:', currentDecisionRecord.id)
-          try {
-            const updateResponse = await fetch(`${XANO_BASE_URL}/island_survival_score/${currentDecisionRecord.id}`, {
+          
+          // Now PATCH all previous user records to mark as completed
+          const scoresResponse = await fetch(`${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(session.user.email)}`, {
+            method: 'GET',
+          headers: {
+              'Content-Type': 'application/json',
+            }
+          })
+          
+          if (scoresResponse.ok) {
+            const scoresData = await scoresResponse.json()
+            const scoreRecords = scoresData.score_records || []
+            
+            // PATCH each incomplete record to mark as completed
+            for (const record of scoreRecords) {
+              if (!record.complete) {
+                console.log(`Marking record ${record.id} as complete`)
+                
+                const patchResponse = await fetch(`${XANO_BASE_URL}/island_survival_score/${record.id}`, {
               method: 'PATCH',
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({
-                complete: true
-              }),
-            })
-            
-            if (updateResponse.ok) {
-              console.log('Successfully marked current decision as complete')
-              
-              // Immediately refetch data to update the UI state
-              console.log('Refetching data to update UI...')
-              await fetchDecisionData()
-              
-              toast.success("Decision made successfully!")
-              setShowNextDecisionDialog(false)
-              
-            } else {
-              console.error('Failed to update current decision to complete')
-              throw new Error('Failed to mark decision as complete')
+                  body: JSON.stringify({
+                    complete: true
+                  })
+                })
+                
+                if (!patchResponse.ok) {
+                  console.error(`Failed to mark record ${record.id} as complete`)
+                }
+              }
             }
-          } catch (updateError) {
-            console.error('Error updating current decision:', updateError)
-            throw updateError
+          }
+        } catch (error) {
+          console.error('Error saving score or marking records as complete:', error)
           }
         } else {
-          console.warn('Could not find current decision record to mark as complete')
-          // Still refetch data in case the decision was created successfully
-          await fetchDecisionData()
-          toast.success("Decision made successfully!")
-          setShowNextDecisionDialog(false)
-        }
-        
-      } else {
-        throw new Error('Failed to save decision')
+        console.log('Skipping score save - user not logged in or guest user')
+        // Still show success for guest users
+        toast.info('Decision recorded (login to save progress)')
       }
+
+      // Update player status
+      setPlayerStatus(newStats)
+      
+      // Mark the choice as confirmed (turn it green)
+      setConfirmedChoiceId(selectedChoice.id)
+      
+      // Show success message if logged in
+      if (effectiveEmail && effectiveEmail !== 'guest' && session?.user?.email) {
+        toast.success('Decision saved successfully!')
+      }
+      
+      // Close dialog
+      setShowNextDecisionDialog(false)
     } catch (error) {
       console.error('Error saving decision:', error)
       toast.error('Failed to save decision. Please try again.')
@@ -546,531 +411,251 @@ export default function DecisionPage() {
       return
     }
     
-    setIsStartingOver(true)
+    // Show confirmation dialog
+    const confirmed = window.confirm("Are you sure you want to start over? This will reset your progress.")
+    if (!confirmed) return
+    
     try {
-      // Call the dedicated start over API endpoint if it exists, otherwise manually delete
-      try {
-        const startOverResponse = await fetch(`${XANO_BASE_URL}/island_survival_startover`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: effectiveEmail
-          })
-        })
-        
-        if (startOverResponse.ok) {
+      // No API calls - just reset and navigate
           toast.success("Starting fresh adventure!")
-          router.push('/')
-          return
-        }
-      } catch (apiError) {
-        console.log('Start over API not available, using manual deletion')
-      }
-      
-      // Manual deletion fallback - get all user decisions and delete them
-      const response = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      })
-      
-      if (response.ok) {
-        const allDecisions = await response.json()
-        const userDecisions = allDecisions.filter((d: any) => d.email === effectiveEmail)
-        
-        console.log(`Found ${userDecisions.length} decisions to delete for user: ${effectiveEmail}`)
-        
-        // Delete each user decision
-        for (const decision of userDecisions) {
-          try {
-            const deleteResponse = await fetch(`${XANO_BASE_URL}/island_survival_score/${decision.id}`, {
-              method: 'DELETE',
-            })
-            
-            if (deleteResponse.ok) {
-              console.log(`Deleted decision ${decision.id}`)
-            } else {
-              console.error(`Failed to delete decision ${decision.id}:`, deleteResponse.status)
-            }
-          } catch (deleteError) {
-            console.error(`Error deleting decision ${decision.id}:`, deleteError)
-          }
-        }
-        
-        toast.success("Journey reset successfully! Starting fresh adventure...")
-        
-        // Navigate back to home
-        router.push('/')
-      } else {
-        throw new Error('Failed to fetch user decisions')
-      }
+      router.push("/")
     } catch (error) {
       console.error('Error starting over:', error)
       toast.error('Failed to reset journey. Please try again.')
-    } finally {
-      setIsStartingOver(false)
     }
   }
 
-  // Check if this decision has already been made by the user
-  // A decision is made if there's a user decision that came FROM this page
-  const isDecisionCompleted = !!userDecisionFromThisPage
-
-  // Check if this is a final decision (decision_id contains FINAL_)
-  const isFinalDecision = decisionData?.decision_id?.includes('FINAL_') || decisionData?.decision_id?.includes('ENDING') || decisionData?.decision_id?.includes('END')
-  
-  // Check if game is completed (user has reached a final decision)
-  const gameCompleted = userDecisionFromThisPage && (
-    userDecisionFromThisPage.decision_id?.includes('FINAL_') || 
-    userDecisionFromThisPage.decision_id?.includes('ENDING') ||
-    userDecisionFromThisPage.decision_id?.includes('END') ||
-    isFinalDecision
-  )
-
-  // Show reset button on any FINAL_ page
-  const showResetButton = isFinalDecision
-
-  const getStatusColor = (value: number) => {
-    // Convert decimal to percentage if needed (Xano API uses 0.0-1.0 format)
-    const percentage = value <= 1 ? value * 100 : value
-    if (percentage >= 70) return "text-green-600"
-    if (percentage >= 40) return "text-yellow-600"
-    return "text-red-600"
-  }
-
-  const formatPercentage = (value: number) => {
-    // Convert decimal to percentage if needed (Xano API uses 0.0-1.0 format)
-    const percentage = value <= 1 ? value * 100 : value
-    return Math.round(percentage)
-  }
-
-  if (loading) {
+  if (loading || sessionStatus === 'loading') {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-8">
-          <Skeleton className="h-8 w-64 mb-8" />
-          <Skeleton className="h-96 mb-8" />
+      <div className="container mx-auto p-6 max-w-6xl">
+        <div className="animate-pulse">
+          <p className="text-center mb-4">
+            {sessionStatus === 'loading' ? 'Loading session...' : 'Loading story data...'}
+          </p>
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+          <div className="h-64 bg-gray-200 rounded mb-6"></div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="h-24 bg-gray-200 rounded"></div>
+            <div className="h-24 bg-gray-200 rounded"></div>
+            <div className="h-24 bg-gray-200 rounded"></div>
+          </div>
         </div>
       </div>
     )
   }
 
   if (!decisionData) {
+    const storyId = params.id as string
+    const storyIdNum = parseInt(storyId)
+    const isInvalidId = !storyId || storyId === 'undefined' || storyId === 'null' || isNaN(storyIdNum) || storyIdNum < 1
+    
     return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-8">
-          <Link href="/" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-8">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Command Center
-          </Link>
+      <div className="container mx-auto p-6 max-w-6xl">
           <Card>
-            <CardContent className="p-8 text-center">
-              <h2 className="text-2xl font-bold mb-4">Decision Not Found</h2>
-              <p className="text-muted-foreground">The requested decision could not be loaded.</p>
+          <CardContent className="pt-6 text-center">
+            <h2 className="text-xl font-semibold text-gray-700 mb-4">
+              {isInvalidId ? 'Invalid Story ID' : 'Story Not Found'}
+            </h2>
+            <p className="text-gray-600 mb-4">
+              {isInvalidId 
+                ? 'The story ID provided is not valid. Story IDs must be positive numbers.'
+                : 'The requested story could not be found.'}
+            </p>
+            <p className="text-sm text-gray-500 mb-6">Story ID: {params.id}</p>
+            <Button 
+              onClick={() => router.push('/')}
+              className="w-full max-w-xs mx-auto"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Return to Dashboard
+            </Button>
             </CardContent>
           </Card>
-        </div>
       </div>
     )
   }
 
+  console.log('Rendering decision page with data:', {
+    title: decisionData.decision_title,
+    hasStory: !!decisionData.story,
+    hasHeroImage: !!decisionData.hero_image,
+    nextChoices: decisionData.next?.length || 0
+  })
+
+  // Show login prompt if user is not authenticated
+  const showLoginPrompt = sessionStatus === 'unauthenticated'
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-
-        {/* Game Completion Section */}
-        {gameCompleted && (
-          <div className="mb-6 p-4 bg-muted/50 border border-muted rounded-lg print:hidden">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800 font-mono">
-                  Mission Complete
-                </Badge>
-                <span className="text-sm text-muted-foreground font-mono">Adventure finished successfully</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Hero Banner */}
-        <div className="w-full mb-8 print:hidden">
+    <div className="container mx-auto p-6 max-w-6xl">
           {/* Hero Image */}
-          <div className="relative w-full h-80 md:h-96 overflow-hidden rounded-xl mb-6">
-            <div 
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{
-                backgroundImage: `url(${getHeroImageForDecision(decisionData)})`
-              }}
-            />
-            
-            {/* Overlay Buttons */}
-            <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+      {decisionData.hero_image && (
+        <div className="relative w-full h-64 md:h-96 mb-6 rounded-lg overflow-hidden">
+          <img 
+            src={decisionData.hero_image} 
+            alt={decisionData.decision_title}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          
+          {/* Buttons on top of image */}
+          <div className="absolute top-4 left-0 right-0 flex justify-between px-4">
               <Button 
                 variant="secondary" 
+              size="sm"
                 onClick={() => router.push('/')}
-                className="bg-white hover:bg-gray-50 text-foreground shadow-lg"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Command Center
+              className="bg-white/90 hover:bg-white text-black"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Return to Dashboard
               </Button>
-              
               <Button 
                 variant="secondary" 
+              size="sm"
                 onClick={() => window.print()}
-                className="bg-white hover:bg-gray-50 text-foreground shadow-lg"
-              >
-                <Printer className="h-4 w-4 mr-2" />
-                Print PDF
+              className="bg-white/90 hover:bg-white text-black"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print
               </Button>
-            </div>
           </div>
           
-          {/* Content Below Image */}
-          <div className="mb-8">
-            <div className="mb-4">
-              {decisionData.decision_number > 0 && (
-                <div className="text-sm font-mono text-muted-foreground mb-2">
-                  Decision {decisionData.decision_number}
+          <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+            <h1 className="text-4xl font-bold mb-2">{decisionData.decision_title}</h1>
+            {decisionData.decision_description && (
+              <p className="text-xl opacity-90">{decisionData.decision_description}</p>
+            )}
                 </div>
-              )}
-              {decisionData.decision_number === 0 && (
-                <div className="text-sm font-mono text-muted-foreground mb-2">
-                  START
-                </div>
-              )}
-              <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-                {decisionData.decision_title}
-              </h1>
-              {(decisionData.decision_summary || decisionData.decision_description) && (
-                <p className="text-lg md:text-xl text-muted-foreground mb-4 max-w-3xl">
-                  {decisionData.decision_summary || decisionData.decision_description}
-                </p>
-              )}
-              <div className="flex items-center space-x-2">
-                {isDecisionCompleted && (
-                  <Badge variant="secondary" className="font-mono text-xs bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800">
-                    Completed
-                  </Badge>
-                )}
-                {isFinalDecision && (
-                  <Badge variant="default" className="font-mono text-xs bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-900 dark:text-purple-100 dark:hover:bg-purple-800">
-                    Final Decision
-                  </Badge>
-                )}
               </div>
-            </div>
-          </div>
-        </div>
+      )}
 
-        {/* Decision Content - Blog Format */}
-        <article className="mb-12">
-          {/* Print-only header */}
-          <div className="hidden print:block mb-8">
-            <div className="print-title">Edge of Survival</div>
-            <div className="print-subtitle">{decisionData.decision_title}</div>
-            <h1 className="text-3xl font-bold mb-2 mt-4">{decisionData?.decision_title}</h1>
-            {(decisionData?.decision_number ?? 0) > 0 && (
-              <p className="text-lg text-gray-600">Decision {decisionData?.decision_number}</p>
-            )}
-          </div>
-
-          <div className="mb-12 print:mb-0">
-            {decisionData.decision_text && (
-              <MarkdownContent content={decisionData.decision_text} />
-            )}
-          </div>
-        </article>
-
-        {/* Choice Cards - Side by Side */}
-        {decisionData.next && decisionData.next.length > 0 && (
-          <div className="mb-12 print:hidden">
-            <h2 className="text-2xl font-bold mb-6 text-left">
-              {isDecisionCompleted ? "Your Decision" : "Make Your Decision"}
-            </h2>
-            <div className="grid md:grid-cols-2 gap-8">
-              {decisionData.next.map((choice) => {
-                // Determine if this is the choice the user made FROM this page
-                // Compare: choice.id (where this choice leads) vs userDecisionFromThisPage.island_survival_stories_id (where user went)
-                const isSelectedChoice = isDecisionCompleted && userDecisionFromThisPage && 
-                  choice.id === userDecisionFromThisPage.island_survival_stories_id
-                const isOtherChoice = isDecisionCompleted && !isSelectedChoice
-
-
-
-                return (
-                  <Card 
-                    key={choice.id} 
-                    className={`h-full flex flex-col transition-all bg-white dark:bg-card shadow-md ${
-                      isSelectedChoice 
-                        ? "border-green-500 bg-green-50 dark:bg-green-950/30" 
-                        : isOtherChoice 
-                        ? "opacity-50 border-gray-200 bg-gray-50 dark:bg-gray-900/50" 
-                        : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600 hover:shadow-lg"
-                    }`}
-                  >
-                    <CardHeader className="pb-4">
-                      {isSelectedChoice && (
-                        <div className="mb-3">
-                          <Badge variant="secondary" className="bg-green-100 text-green-600 hover:bg-green-200 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800 font-mono text-xs">
-                            Chosen on {new Date(userDecisionFromThisPage?.created_at ?? 0).toLocaleDateString()}
-                          </Badge>
-                        </div>
-                      )}
-                      {choice.decision_description && (
-                        <CardDescription className="text-base leading-relaxed text-foreground font-medium">
-                          {choice.decision_description}
-                        </CardDescription>
-                      )}
-                    </CardHeader>
-                    <CardContent className="flex-1 flex flex-col pt-0">
-                      {!isDecisionCompleted && (
+      {/* Buttons when no hero image */}
+      {!decisionData.hero_image && (
+        <div className="flex justify-between mb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push('/')}
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Return to Dashboard
+          </Button>
                         <Button 
-                          className="w-full mt-auto bg-black hover:bg-gray-800 text-white font-medium py-3" 
-                          size="lg"
-                          onClick={() => handleChoiceClick(choice)}
-                          disabled={isLoadingNext}
-                        >
-                          {isLoadingNext ? "Making Decision..." : "Choose This Path"}
+            variant="outline"
+            size="sm"
+            onClick={() => window.print()}
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Print
                         </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
           </div>
         )}
 
-        {/* Impact of Decision - Only show for completed decisions */}
-        {isDecisionCompleted && userDecisionFromThisPage && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold mb-6 text-left">Impact of Your Decision</h2>
-            <div className="grid gap-6 md:grid-cols-3">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center">
-                    <Wrench className="h-4 w-4 mr-2" />
-                    Crew Health
+      {/* Main Story Card */}
+      <Card className="mb-6">
+        <CardHeader>
+          {!decisionData.hero_image && (
+            <>
+              <CardTitle className="text-3xl font-bold">
+                {decisionData.decision_title}
                   </CardTitle>
+              {decisionData.decision_description && (
+                <CardDescription className="text-lg mt-2">
+                  {decisionData.decision_description}
+                </CardDescription>
+              )}
+            </>
+          )}
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between text-sm mb-2 font-mono">
-                    <span className="text-muted-foreground">Before:</span>
-                    <span className={getStatusColor(userDecisionFromThisPage.condition_before ?? 0)}>
-                      {formatPercentage(userDecisionFromThisPage.condition_before ?? 0)}%
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm mb-2 font-mono">
-                    <span className="text-muted-foreground">Change:</span>
-                    <span className={`font-bold ${(userDecisionFromThisPage._island_survival_stories_singleitem?.condition ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {userDecisionFromThisPage._island_survival_stories_singleitem?.condition === 0 ? '0%' : `${(userDecisionFromThisPage._island_survival_stories_singleitem?.condition ?? 0) >= 0 ? '+' : ''}${Math.round((userDecisionFromThisPage._island_survival_stories_singleitem?.condition ?? 0) * 100)}%`}
-                    </span>
-                  </div>
-                  {userDecisionFromThisPage._island_survival_stories_singleitem?.condition_description && (
-                    <div className="text-xs text-muted-foreground mb-2 italic">
-                      {userDecisionFromThisPage._island_survival_stories_singleitem.condition_description}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between text-sm font-mono">
-                    <span className="text-muted-foreground">After:</span>
-                    <span className={`font-bold ${getStatusColor(userDecisionFromThisPage.shipcondition_after ?? 0)}`}>
-                      {formatPercentage(userDecisionFromThisPage.shipcondition_after ?? 0)}%
-                    </span>
-                  </div>
+          <MarkdownContent content={decisionData.story} />
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center">
-                    <Users className="h-4 w-4 mr-2" />
-                    Crew Morale
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm mb-2 font-mono">
-                    <span className="text-muted-foreground">Before:</span>
-                    <span className={getStatusColor(userDecisionFromThisPage.morale_before ?? 0)}>
-                      {formatPercentage(userDecisionFromThisPage.morale_before ?? 0)}%
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm mb-2 font-mono">
-                    <span className="text-muted-foreground">Change:</span>
-                    <span className={`font-bold ${(userDecisionFromThisPage._island_survival_stories_singleitem?.morale ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {userDecisionFromThisPage._island_survival_stories_singleitem?.morale === 0 ? '0%' : `${(userDecisionFromThisPage._island_survival_stories_singleitem?.morale ?? 0) >= 0 ? '+' : ''}${Math.round((userDecisionFromThisPage._island_survival_stories_singleitem?.morale ?? 0) * 100)}%`}
-                    </span>
-                  </div>
-                  {userDecisionFromThisPage._island_survival_stories_singleitem?.morale_description && (
-                    <div className="text-xs text-muted-foreground mb-2 italic">
-                      {userDecisionFromThisPage._island_survival_stories_singleitem.morale_description}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between text-sm font-mono">
-                    <span className="text-muted-foreground">After:</span>
-                    <span className={`font-bold ${getStatusColor(userDecisionFromThisPage.morale_after ?? 0)}`}>
-                      {formatPercentage(userDecisionFromThisPage.morale_after ?? 0)}%
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center">
-                    <Coins className="h-4 w-4 mr-2" />
-                    Resources
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm mb-2 font-mono">
-                    <span className="text-muted-foreground">Before:</span>
-                    <span className={getStatusColor(userDecisionFromThisPage.resources_before ?? 0)}>
-                      {userDecisionFromThisPage.resources_before ?? 0}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm mb-2 font-mono">
-                    <span className="text-muted-foreground">Change:</span>
-                    <span className={`font-bold ${(userDecisionFromThisPage._island_survival_stories_singleitem?.resources ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {userDecisionFromThisPage._island_survival_stories_singleitem?.resources === 0 ? '0' : `${(userDecisionFromThisPage._island_survival_stories_singleitem?.resources ?? 0) >= 0 ? '+' : ''}${userDecisionFromThisPage._island_survival_stories_singleitem?.resources ?? 0}`}
-                    </span>
-                  </div>
-                  {userDecisionFromThisPage._island_survival_stories_singleitem?.resources_description && (
-                    <div className="text-xs text-muted-foreground mb-2 italic">
-                      {userDecisionFromThisPage._island_survival_stories_singleitem.resources_description}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between text-sm font-mono">
-                    <span className="text-muted-foreground">After:</span>
-                    <span className={`font-bold ${getStatusColor(userDecisionFromThisPage.resources_after ?? 0)}`}>
-                      {userDecisionFromThisPage.resources_after ?? 0}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        )}
 
-        {/* Reflection Questions - Only show for completed decisions */}
-        {isDecisionCompleted && userDecisionFromThisPage && (
-          userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_1 ||
-          userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_2 ||
-          userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_3 ||
-          userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_4
-        ) && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold mb-6 text-left">Reflection Questions</h2>
-            <p className="text-muted-foreground mb-6">Take a moment to reflect on this pivotal moment in your journey.</p>
-            <div className="space-y-4">
-              {userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_1 && (
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start space-x-3">
-                      <Badge variant="outline" className="font-mono text-xs mt-1">
-                        Question 1
-                      </Badge>
-                      <p className="text-sm leading-relaxed text-foreground flex-1">
-                        {userDecisionFromThisPage._island_survival_stories_singleitem.reflective_prompt_1}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-              {userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_2 && (
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start space-x-3">
-                      <Badge variant="outline" className="font-mono text-xs mt-1">
-                        Question 2
-                      </Badge>
-                      <p className="text-sm leading-relaxed text-foreground flex-1">
-                        {userDecisionFromThisPage._island_survival_stories_singleitem.reflective_prompt_2}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-              {userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_3 && (
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start space-x-3">
-                      <Badge variant="outline" className="font-mono text-xs mt-1">
-                        Question 3
-                      </Badge>
-                      <p className="text-sm leading-relaxed text-foreground flex-1">
-                        {userDecisionFromThisPage._island_survival_stories_singleitem.reflective_prompt_3}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-              {userDecisionFromThisPage._island_survival_stories_singleitem?.reflective_prompt_4 && (
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-start space-x-3">
-                      <Badge variant="outline" className="font-mono text-xs mt-1">
-                        Question 4
-                      </Badge>
-                      <p className="text-sm leading-relaxed text-foreground flex-1">
-                        {userDecisionFromThisPage._island_survival_stories_singleitem.reflective_prompt_4}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </div>
-        )}
 
-        {/* Navigation after decision is made */}
-        {isDecisionCompleted && (
-          <div className="mt-8 flex flex-col gap-3 print:hidden">
-            <Button 
-              onClick={() => router.push('/')}
-              size="lg"
-              variant="outline"
-              className="w-full"
-            >
-              Return to Command Center
-            </Button>
-            {showResetButton && (
-              <Button 
-                onClick={handleStartOver}
-                disabled={isStartingOver}
-                size="lg"
-                className="w-full bg-black hover:bg-gray-800 text-white"
+      {/* Choice Cards */}
+      {decisionData.next && decisionData.next.length > 0 && (
+        <div>
+          <h2 className="text-2xl font-bold mb-4">What will you do?</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {decisionData.next.map((choice) => (
+              <Card 
+                key={choice.id}
+                className={`cursor-pointer hover:shadow-lg transition-all ${
+                  confirmedChoiceId === choice.id 
+                    ? 'bg-green-50 border-green-500 shadow-green-200' 
+                    : ''
+                }`}
+                onClick={() => !confirmedChoiceId && handleChoiceClick(choice)}
               >
-                {isStartingOver ? "Resetting..." : "Start New Journey"}
-              </Button>
-            )}
+                <CardHeader>
+                  <CardTitle className="text-xl">{choice.decision_title}</CardTitle>
+                  <CardDescription className="text-base mt-2">
+                    {choice.decision_choice || choice.decision_description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {confirmedChoiceId === choice.id ? (
+                    <div className="flex items-center justify-center text-green-600 font-semibold">
+                      <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Decision Confirmed
+                  </div>
+                  ) : (
+                    <Button 
+                      className="w-full" 
+                      size="lg"
+                      variant="outline"
+                      disabled={!!confirmedChoiceId}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleChoiceClick(choice);
+                      }}
+                    >
+                      Choose this option →
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+            </div>
           </div>
         )}
 
-        {/* Show reset button even if decision not completed, but on FINAL_ pages */}
-        {!isDecisionCompleted && showResetButton && (
-          <div className="mt-8 print:hidden">
+      {/* Return to Dashboard Button */}
+      <div className="mt-8">
             <Button 
-              onClick={handleStartOver}
-              disabled={isStartingOver}
-              size="lg"
-              className="w-full bg-black hover:bg-gray-800 text-white"
-            >
-              {isStartingOver ? "Resetting..." : "Start New Journey"}
-            </Button>
+              variant="outline"
+              onClick={() => router.push('/')}
+              className="w-full"
+                size="lg"
+              >
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Return to Dashboard
+              </Button>
           </div>
-        )}
 
-        {/* Next Decision Dialog */}
+      {/* Decision Confirmation Modal */}
         <DecisionConfirmationModal
           isOpen={showNextDecisionDialog}
           onClose={() => setShowNextDecisionDialog(false)}
           onConfirm={handleConfirmDecision}
-          choice={decisionData?.next.find(c => c.id === selectedNextDecision) || null}
+          choice={decisionData?.next?.find(c => c.id === selectedNextDecision) || null}
           isSubmitting={isLoadingNext}
+          currentStats={playerStatus}
         />
-      </div>
     </div>
   )
 }

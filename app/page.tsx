@@ -17,7 +17,7 @@ interface UserDecision {
   id: number
   created_at: number
   decision_id: string
-  decision_description: string
+  decision_description?: string
   email: string
   previous_decision: string
   morale_before: number
@@ -26,16 +26,28 @@ interface UserDecision {
   morale_after: number
   shipcondition_after: number
   resources_after: number
-  island_survival_stories_id: number
+  island_survival_stories_id?: number
   complete: boolean
-  _island_survival_stories_singleitem: {
+  current?: number
+  island_survival_sequence_id?: number
+  story_sequence?: {
+    id: number
+    created_at: number
+    current_story_id: number
+    decision_id: string
+    choice_type: string
+    decision_number: number
+    previous_stories: number[]
+    next_stories: number[]
+  }
+  _island_survival_stories_singleitem?: {
     id: number
     created_at: number
     decision_id: string
     next: number[]
     decision_title: string
     decision_description: string
-    decision_text: string
+    story: string
     condition: number
     morale: number
     resources: number
@@ -71,7 +83,8 @@ interface SpacePirateNarrative {
   decision_id: string
   decision_title: string
   decision_description: string
-  decision_text: string
+  decision_text?: string // Keep for backward compatibility
+  story?: string
   condition: number
   morale: number
   resources: number
@@ -130,9 +143,9 @@ export default function HomePage() {
   const isAuthenticated = !!userEmail
 
   const [currentPlayerStatus, setCurrentPlayerStatus] = useState({
-    condition: 0.8, // 80%
-    morale: 0.8,    // 80%
-    resources: 65,  // 65 units
+    condition: 0,
+    morale: 0,
+    resources: 0
   })
 
   const router = useRouter()
@@ -151,154 +164,98 @@ export default function HomePage() {
     // Only fetch data when we have an email and not loading
     if (effectiveEmail && !isUserLoading) {
       console.log('Fetching data for user:', effectiveEmail)
+      
+      // Call create_new_story endpoint
+      const callCreateNewStory = async () => {
+        try {
+          console.log('Calling create_new_story for user:', effectiveEmail)
+          
+          const response = await fetch(`${XANO_BASE_URL}/create_new_story?user_email=${encodeURIComponent(effectiveEmail)}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          })
+          
+          if (response.ok) {
+            const result = await response.json()
+            console.log('create_new_story response:', result)
+          } else {
+            console.error('create_new_story failed:', response.status, response.statusText)
+          }
+        } catch (error) {
+          console.error('Error calling create_new_story:', error)
+        }
+      }
+      
+      // Call create_new_story first
+      callCreateNewStory()
+      
+      // Then fetch user settings
       fetchData(effectiveEmail)
       
-      // Set up periodic refresh for leaderboard data (every 30 seconds)
-      const refreshInterval = setInterval(() => {
-        fetchData(effectiveEmail)
-      }, 30000)
-      
-      // Cleanup interval on unmount
-      return () => clearInterval(refreshInterval)
+      // No automatic refresh - only manual refresh when needed
     }
   }, [effectiveEmail, isUserLoading])
 
-  // Refresh data when window gains focus
-  useEffect(() => {
-    const handleFocus = () => {
-      if (effectiveEmail && !isUserLoading) {
-        fetchData(effectiveEmail)
-      }
-    }
-    
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [effectiveEmail, isUserLoading])
+  // Remove window focus refresh to prevent constant API calls
 
   async function fetchData(email: string) {
     try {
       console.log('Starting fetchData for email:', email)
       
-      // Fetch user decisions from island_survival_score endpoint
-      const spacePiratesResponse = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      })
-      const allDecisions: UserDecision[] = await spacePiratesResponse.json()
-      console.log('Total decisions fetched:', allDecisions.length)
-      
-      // Filter decisions by the current user's email
-      const userDecisions = allDecisions.filter(decision => decision.email === email)
-      console.log('User decisions found:', userDecisions.length, 'for email:', email)
-      setUserMadeDecisions(userDecisions)
-
-      // Fetch island survival stories
-      const narrativesResponse = await fetch(`${XANO_BASE_URL}/island_survival_stories`, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      })
-      const narratives: SpacePirateNarrative[] = await narrativesResponse.json()
-      console.log('All narratives fetched:', narratives.length)
-      setAvailableDecisions(narratives)
-
-      // Auto-initialize new users with settings and START decision
-      if (userDecisions.length === 0) {
-        console.log('New user detected, creating initial settings and START decision...')
-        
-        // Find the START decision in the narratives
-        const startDecision = narratives.find(n => n.decision_id === "START" || n.decision_number === 0)
-        
-        if (startDecision) {
-          try {
-            // Create initial START decision record with complete: false
-            const initialDecisionPayload = {
-              decision_id: "START",
-              email: email,
-              previous_decision: "", // No previous decision for START
-              morale_before: 0.8,
-              condition_before: 0.8,
-              resources_before: 65,
-              morale_after: 0.8,
-              shipcondition_after: 0.8,
-              resources_after: 65,
-              island_survival_stories_id: startDecision.id,
-              complete: false // START is available, not complete initially
-            }
-            
-            console.log('Creating initial START decision with payload:', initialDecisionPayload)
-            
-            const startDecisionResponse = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(initialDecisionPayload),
-            })
-            
-            if (startDecisionResponse.ok) {
-              const createdStartDecision = await startDecisionResponse.json()
-              console.log('Initial START decision created successfully:', createdStartDecision)
-              
-              // Add to local state
-              setUserMadeDecisions([createdStartDecision])
-              
-              toast.success("Welcome! Your space adventure is ready to begin...")
-            } else {
-              console.error('Failed to create initial START decision - Status:', startDecisionResponse.status)
-              const errorText = await startDecisionResponse.text()
-              console.error('START decision error response:', errorText)
-            }
-          } catch (startDecisionError) {
-            console.error('Error creating initial START decision:', startDecisionError)
+      // Fetch user's decisions using user_all_scores endpoint
+      try {
+        const scoresResponse = await fetch(`${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(email)}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
           }
-        }
+        })
         
-        // Create initial settings for the new user
-        try {
-          const initialSettingsPayload = {
-            email: email,
-            vessel_name: "Set Survival Tribe Name",
-            crew_name: "Set Crew Name",
-            crew_leader_name: "Set Crew Leader Name",
-            crew_captain_name: "Set Crew Captain Name"
-          }
+        if (scoresResponse.ok) {
+          const scoresData = await scoresResponse.json()
+          console.log('user_all_scores response:', scoresData)
           
-          console.log('Creating initial settings with payload:', initialSettingsPayload)
-          
-          const settingsResponse = await fetch(`${XANO_BASE_URL}/island_survival_settings`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(initialSettingsPayload),
-          })
-          
-          if (settingsResponse.ok) {
-            const createdSettings = await settingsResponse.json()
-            console.log('Initial settings created successfully:', createdSettings)
+          // Handle the response structure with score_records array
+          if (scoresData && scoresData.score_records && Array.isArray(scoresData.score_records)) {
+            setUserMadeDecisions(scoresData.score_records)
+            console.log(`Found ${scoresData.score_records.length} decisions for user:`, email)
             
-            // Update local settings state
-            setUserSettings({
-              vessel_name: createdSettings.vessel_name || "Set Survival Tribe Name",
-              crew_name: createdSettings.crew_name || "Set Crew Name",
-              crew_leader_name: createdSettings.crew_leader_name || "Set Crew Leader Name",
-              crew_captain_name: createdSettings.crew_captain_name || "Set Crew Captain Name"
-            })
+            // Store the current story data if available
+            if (scoresData.current_story) {
+              console.log('Current story:', scoresData.current_story)
+            }
+          } else if (Array.isArray(scoresData)) {
+            // Fallback if API returns array directly
+            setUserMadeDecisions(scoresData)
+            console.log(`Found ${scoresData.length} decisions for user:`, email)
           } else {
-            console.error('Failed to create initial settings - Status:', settingsResponse.status)
-            const errorText = await settingsResponse.text()
-            console.error('Settings error response:', errorText)
+            console.log('user_all_scores returned unexpected format:', scoresData)
+            setUserMadeDecisions([])
           }
-        } catch (settingsError) {
-          console.error('Error creating initial settings:', settingsError)
+        } else {
+          console.error('user_all_scores failed:', scoresResponse.status, scoresResponse.statusText)
+          
+          // Try to get error details
+          try {
+            const errorText = await scoresResponse.text()
+            console.error('Error response body:', errorText)
+          } catch (e) {
+            console.error('Could not read error response')
+          }
+          
+          setUserMadeDecisions([])
         }
+      } catch (error) {
+        console.error('Error fetching user_all_scores:', error)
+        setUserMadeDecisions([])
       }
+      
+      setAvailableDecisions([])
       
       // Fetch user settings
       try {
@@ -369,122 +326,53 @@ export default function HomePage() {
             }
           }
 
-          // Create leaderboard from all user decisions with real-time data
-          const leaderboardData: LeaderboardEntry[] = []
-          
-          // Create a lookup map for user settings by email
-          const settingsLookup: Record<string, any> = {}
-          if (Array.isArray(allSettingsData)) {
-            allSettingsData.forEach((setting: any) => {
-              if (setting.email) {
-                // Keep the most recent settings for each user
-                if (!settingsLookup[setting.email] || setting.created_at > settingsLookup[setting.email].created_at) {
-                  settingsLookup[setting.email] = setting
+          // Fetch leaderboard data from API
+          try {
+            const leaderboardResponse = await fetch(`${XANO_BASE_URL}/leaderboard_values?user_email=${encodeURIComponent(email)}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            })
+            
+            if (leaderboardResponse.ok) {
+              const leaderboardData = await leaderboardResponse.json()
+              console.log('leaderboard_values response:', leaderboardData)
+              
+              if (Array.isArray(leaderboardData)) {
+                // Log the first entry to see the data structure
+                if (leaderboardData.length > 0) {
+                  console.log('First leaderboard entry structure:', leaderboardData[0])
                 }
-              }
-            })
-          }
-          
-          console.log('Settings lookup created for', Object.keys(settingsLookup).length, 'users')
-          
-          // Group decisions by user email and get their latest decision
-          const userGroups = allDecisions.reduce((groups, decision) => {
-            if (!decision.email) return groups
-            
-            if (!groups[decision.email]) {
-              groups[decision.email] = []
-            }
-            groups[decision.email].push(decision)
-            return groups
-          }, {} as Record<string, UserDecision[]>)
-
-          console.log('Processing leaderboard for', Object.keys(userGroups).length, 'users')
-
-          // Create leaderboard entries from user groups
-          Object.entries(userGroups).forEach(([userEmail, decisions], index) => {
-            if (decisions.length === 0) return
-            
-            // Use the latest decision's saved values directly (these are already the final calculated values)
-            const latestDecision = decisions.sort((a, b) => b.created_at - a.created_at)[0]
-            
-            // Validate the decision data before using it
-            if (!latestDecision || typeof latestDecision.morale_after === 'undefined' || 
-                typeof latestDecision.shipcondition_after === 'undefined' || 
-                typeof latestDecision.resources_after === 'undefined') {
-              console.warn(`Invalid decision data for user ${userEmail}:`, latestDecision)
-              return
-            }
-            
-            // Use the final saved values from Xano (already calculated when decision was made)
-            // Important: These values should NOT be recalculated
-            // Apply rounding to clean up any floating point precision errors
-            const finalMorale = clampMoraleCondition(latestDecision.morale_after)
-            const finalCondition = clampMoraleCondition(latestDecision.shipcondition_after)
-            const finalResources = clampResources(latestDecision.resources_after)
-            
-            // Convert to weighted percentages for scoring (each worth 33.33%)
-            const moraleScore = (finalMorale * 100) * 0.3333
-            const conditionScore = (finalCondition * 100) * 0.3333
-            const resourcesScore = (finalResources / 100) * 100 * 0.3333  // Normalize resources to 0-100 scale then weight
-            const totalScore = moraleScore + conditionScore + resourcesScore
-            
-            console.log(`User ${userEmail}: weighted scoring - morale=${moraleScore.toFixed(1)}, condition=${conditionScore.toFixed(1)}, resources=${resourcesScore.toFixed(1)}, total=${totalScore.toFixed(1)}`)
-            
-            // Debug: Log precision issues if found
-            if (finalMorale !== latestDecision.morale_after || 
-                finalCondition !== latestDecision.shipcondition_after || 
-                finalResources !== latestDecision.resources_after) {
-              console.warn(`Precision errors found for ${userEmail}:`, {
-                original: { 
-                  morale: latestDecision.morale_after, 
-                  condition: latestDecision.shipcondition_after, 
-                  resources: latestDecision.resources_after 
-                },
-                cleaned: { morale: finalMorale, condition: finalCondition, resources: finalResources }
-              })
-            }
-            
-            // Use the nested narrative data for the decision title
-            let decisionTitle = "No recent activity"
-            if (latestDecision._island_survival_stories_singleitem?.decision_title) {
-              decisionTitle = latestDecision._island_survival_stories_singleitem.decision_title
-            } else if (latestDecision.decision_description) {
-              decisionTitle = latestDecision.decision_description
-            } else {
-              // Fallback to finding the corresponding narrative
-              const correspondingNarrative = narratives.find(n => n.decision_id === latestDecision.decision_id)
-              if (correspondingNarrative) {
-                decisionTitle = correspondingNarrative.decision_title
+                
+                // Sort by total_score if not already sorted and add rank
+                const sortedLeaderboard = leaderboardData
+                  .sort((a, b) => (b.total_score || 0) - (a.total_score || 0))
+                  .map((entry, index) => ({ ...entry, rank: index + 1 }))
+                
+                setLeaderboard(sortedLeaderboard)
+                console.log(`Leaderboard has ${sortedLeaderboard.length} entries`)
               } else {
-                decisionTitle = `Decision ${latestDecision.decision_id}`
+                console.log('leaderboard_values returned unexpected format:', leaderboardData)
+                setLeaderboard([])
               }
+            } else {
+              console.error('leaderboard_values failed:', leaderboardResponse.status, leaderboardResponse.statusText)
+              
+              // Try to get error details
+              try {
+                const errorText = await leaderboardResponse.text()
+                console.error('Leaderboard error response:', errorText)
+              } catch (e) {
+                console.error('Could not read leaderboard error response')
+              }
+              
+              setLeaderboard([])
             }
-
-            // Get the user's specific crew name from the settings lookup
-            const userSpecificSettings = settingsLookup[userEmail]
-            const userCrewName = userSpecificSettings?.crew_name || ""
-            
-            leaderboardData.push({
-              id: index + 1,
-              email: userEmail,
-              crew_name: userCrewName,  // Use the specific user's crew name
-              crewmoral: finalMorale,        // Use final saved values
-              resources: finalResources,     // Use final saved values
-              shipcondition: finalCondition, // Use final saved values
-              decision_name: decisionTitle,
-              created_at: latestDecision.created_at,
-              rank: 1, // Will be set after sorting
-              total_score: totalScore
-            })
-          })
-
-          // Sort leaderboard by total score and assign ranks
-          const sortedLeaderboard = leaderboardData
-            .sort((a, b) => b.total_score - a.total_score)
-            .map((entry, index) => ({ ...entry, rank: index + 1 }))
-
-          console.log('Updated leaderboard with', sortedLeaderboard.length, 'entries')
-          setLeaderboard(sortedLeaderboard)
+          } catch (error) {
+            console.error('Error fetching leaderboard_values:', error)
+            setLeaderboard([])
+          }
         }
       } catch (error) {
         console.error("Failed to fetch user settings:", error)
@@ -499,31 +387,52 @@ export default function HomePage() {
   // Separate useEffect to update player status when userMadeDecisions changes
   useEffect(() => {
     if (userMadeDecisions.length > 0) {
-      // Use the latest decision's saved values directly (these are already the final calculated values)
-      const latestDecision = userMadeDecisions.sort((a, b) => b.created_at - a.created_at)[0]
+      // Find the latest incomplete record - this represents the user's current location/status
+      const incompleteDecisions = userMadeDecisions.filter(d => !d.complete)
       
-      console.log('Using latest decision saved values:', {
-        condition: latestDecision.shipcondition_after,
-        morale: latestDecision.morale_after,
-        resources: latestDecision.resources_after
-      })
-      
-      // Validate the data before using it
-      if (typeof latestDecision.shipcondition_after === 'number' && 
-          typeof latestDecision.morale_after === 'number' && 
-          typeof latestDecision.resources_after === 'number') {
+      if (incompleteDecisions.length > 0) {
+        // Use the latest incomplete decision's values (where the user currently is)
+        const latestIncompleteDecision = incompleteDecisions.sort((a, b) => b.created_at - a.created_at)[0]
+        
+        console.log('🏠 COMMAND CENTER: Using latest INCOMPLETE decision for current status:', {
+          id: latestIncompleteDecision.id,
+          complete: latestIncompleteDecision.complete,
+          raw_condition: latestIncompleteDecision.shipcondition_after,
+          raw_morale: latestIncompleteDecision.morale_after,
+          raw_resources: latestIncompleteDecision.resources_after
+        })
+        
+        // Use the raw database values directly from the sequence API
+        console.log('🏠 COMMAND CENTER: Setting status from sequence API values (no clamping)')
         setCurrentPlayerStatus({
-          condition: clampMoraleCondition(latestDecision.shipcondition_after),
-          morale: clampMoraleCondition(latestDecision.morale_after),
-          resources: clampResources(latestDecision.resources_after),
+          condition: latestIncompleteDecision.shipcondition_after || 0,
+          morale: latestIncompleteDecision.morale_after || 0,
+          resources: latestIncompleteDecision.resources_after || 0,
+        })
+        
+        console.log('🏠 COMMAND CENTER: Final status set to:', {
+          condition: latestIncompleteDecision.shipcondition_after || 0,
+          morale: latestIncompleteDecision.morale_after || 0,
+          resources: latestIncompleteDecision.resources_after || 0,
         })
       } else {
-        console.warn('Invalid decision data, using defaults:', latestDecision)
-        // Only use defaults if data is actually invalid
+        // All decisions are complete, use the latest completed decision's values
+        const latestDecision = userMadeDecisions.sort((a, b) => b.created_at - a.created_at)[0]
+        
+        console.log('🏠 COMMAND CENTER: All decisions complete, using latest completed decision for status:', {
+          id: latestDecision.id,
+          complete: latestDecision.complete,
+          raw_condition: latestDecision.shipcondition_after,
+          raw_morale: latestDecision.morale_after,
+          raw_resources: latestDecision.resources_after
+        })
+        
+        // Use raw database values directly - NO FALLBACKS OR CLAMPING
+        console.log('🏠 COMMAND CENTER: Setting status to RAW database values from completed decision')
         setCurrentPlayerStatus({
-          condition: 0.8, // 80%
-          morale: 0.8,    // 80%
-          resources: 65,  // 65 units
+          condition: latestDecision.shipcondition_after || 0,
+          morale: latestDecision.morale_after || 0,
+          resources: latestDecision.resources_after || 0,
         })
       }
     } else {
@@ -565,83 +474,21 @@ export default function HomePage() {
     
     setIsStartingOver(true)
     try {
-      // Call the dedicated start over API endpoint if it exists, otherwise manually delete
-      try {
-        const startOverResponse = await fetch(`${XANO_BASE_URL}/island_survival_startover`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: effectiveEmail
-          })
-        })
-        
-        if (startOverResponse.ok) {
-          toast.success("Starting fresh adventure!")
-          // Reset local state
-          setUserMadeDecisions([])
-          setCurrentPlayerStatus({
-            morale: 0.8,
-            resources: 65,
-            condition: 0.8
-          })
-          // Refresh data
-          await fetchData(effectiveEmail)
-          router.push("/")
-          return
-        }
-      } catch (apiError) {
-        console.log('Start over API not available, using manual deletion')
-      }
+      // No API calls - just reset local state
+      console.log('Start over clicked - resetting local state')
       
-      // Manual deletion fallback - get all user decisions and delete them
-      const response = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
+      toast.success("Starting fresh adventure!")
+      
+      // Reset local state
+      setUserMadeDecisions([])
+      setCurrentPlayerStatus({
+        morale: 0.8,
+        resources: 65,
+        condition: 0.8
       })
-      
-      if (response.ok) {
-        const allDecisions = await response.json()
-        const userDecisions = allDecisions.filter((d: any) => d.email === effectiveEmail)
-        
-        console.log(`Found ${userDecisions.length} decisions to delete for user: ${effectiveEmail}`)
-        
-        // Delete each user decision
-        for (const decision of userDecisions) {
-          try {
-            const deleteResponse = await fetch(`${XANO_BASE_URL}/island_survival_score/${decision.id}`, {
-              method: 'DELETE',
-            })
-            
-            if (deleteResponse.ok) {
-              console.log(`Deleted decision ${decision.id}`)
-            } else {
-              console.error(`Failed to delete decision ${decision.id}:`, deleteResponse.status)
-            }
-          } catch (deleteError) {
-            console.error(`Error deleting decision ${decision.id}:`, deleteError)
-          }
-        }
-        
-        toast.success("Journey reset successfully! Starting fresh adventure...")
-        
-        // Reset local state
-        setUserMadeDecisions([])
-        setCurrentPlayerStatus({
-          morale: 0.8,
-          resources: 65,
-          condition: 0.8
-        })
-        // Refresh data
-        await fetchData(effectiveEmail)
-        router.push("/")
-      } else {
-        throw new Error('Failed to fetch user decisions')
-      }
+      // Refresh data
+      await fetchData(effectiveEmail)
+      router.push("/")
     } catch (error) {
       console.error('Error starting over:', error)
       toast.error('Failed to reset journey. Please try again.')
@@ -779,194 +626,76 @@ export default function HomePage() {
             <CardTitle>Decision Journey</CardTitle>
             <CardDescription>Your story progression - make decisions to unlock the next chapter.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {(() => {
-              console.log('=== SIMPLIFIED DECISION JOURNEY DEBUG ===')
-              console.log('Current User:', effectiveEmail)
-              console.log('User Made Decisions:', userMadeDecisions.length)
-              console.log('Available Narratives:', availableDecisions.length)
-              
-              // Sort all narratives by decision_number for proper ordering
-              const sortedNarratives = [...availableDecisions].sort((a, b) => a.decision_number - b.decision_number)
-              
-              // Create a function to check if a decision has been completed
-              // A decision is completed if the user made a choice FROM that decision
-              const isDecisionCompleted = (decisionId: string) => {
-                return userMadeDecisions.some(userDecision => 
-                  userDecision.previous_decision === decisionId && 
-                  userDecision.complete === true
-                )
-              }
-              
-              console.log('User completed decision check:', 
-                sortedNarratives.map(n => `${n.decision_id}: ${isDecisionCompleted(n.decision_id)}`))
-              
-              // Show only the linear path the user has taken
-              const decisionsToShow: Array<SpacePirateNarrative & { 
-                status: 'completed' | 'available' | 'locked',
-                userDecision?: UserDecision 
-              }> = []
-              
-              if (userMadeDecisions.length === 0) {
-                // New user: Show only the starting decision (decision_number = 0 or lowest)
-                const startDecision = sortedNarratives.find(n => n.decision_number === 0) || sortedNarratives[0]
-                if (startDecision) {
-                  decisionsToShow.push({
-                    ...startDecision,
-                    status: 'available'
-                  })
-                  console.log('New user - showing start decision:', startDecision.decision_title)
-                }
-              } else {
-                // Existing user: Show their path including incomplete START decisions
-                
-                // 1. Show all completed decisions AND incomplete START decisions
-                const userDecisionsByTime = [...userMadeDecisions].sort((a, b) => a.created_at - b.created_at)
-                
-                userDecisionsByTime.forEach(userDecision => {
-                  const narrative = sortedNarratives.find(n => n.id === userDecision.island_survival_stories_id)
-                  if (narrative) {
-                    // Show as completed if complete: true, or as available if it's START with complete: false
-                    const isStartIncomplete = userDecision.decision_id === "START" && !userDecision.complete
-                    const status = isStartIncomplete ? 'available' : (userDecision.complete ? 'completed' : 'available')
-                    
-                    decisionsToShow.push({
-                      ...narrative,
-                      status: status,
-                      userDecision: userDecision
-                    })
-                    
-                    if (userDecision.complete) {
-                      console.log('Added completed decision:', narrative.decision_title, 'completed on', new Date(userDecision.created_at).toLocaleDateString())
-                    } else if (isStartIncomplete) {
-                      console.log('Added incomplete START decision:', narrative.decision_title, 'available to complete')
-                    }
-                  }
-                })
-                
-                // Also add decisions they came FROM (these should show as completed)
-                const decisionsTheyMadeChoicesFrom = new Set<string>()
-                userMadeDecisions.forEach(userDecision => {
-                  if (userDecision.complete && userDecision.previous_decision) {
-                    decisionsTheyMadeChoicesFrom.add(userDecision.previous_decision)
-                  }
-                })
-                
-                // Add any missing "FROM" decisions as completed
-                decisionsTheyMadeChoicesFrom.forEach(decisionId => {
-                  const fromDecision = sortedNarratives.find(n => n.decision_id === decisionId)
-                  if (fromDecision && !decisionsToShow.find(d => d.id === fromDecision.id)) {
-                    const relatedUserDecision = userMadeDecisions.find(ud => 
-                      ud.previous_decision === decisionId && ud.complete
-                    )
-                    
-                    decisionsToShow.push({
-                      ...fromDecision,
-                      status: 'completed',
-                      userDecision: relatedUserDecision
-                    })
-                    
-                    console.log('Added FROM decision as completed:', fromDecision.decision_title)
-                  }
-                })
-                
-                // Sort decisions to show by decision_number to maintain order
-                decisionsToShow.sort((a, b) => a.decision_number - b.decision_number)
-              }
-              
-              console.log('=== FINAL DECISIONS TO SHOW ===')
-              decisionsToShow.forEach((decision, index) => {
-                console.log(`${index + 1}. ${decision.decision_title} (${decision.status}) - ID: ${decision.id} - Decision #${decision.decision_number}`)
-              })
-
-              if (decisionsToShow.length === 0) {
-                return (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No decisions available</p>
-                    <p className="text-sm">Please refresh the page or contact support</p>
-                    <div className="mt-4 text-xs bg-gray-100 dark:bg-gray-800 p-4 rounded">
-                      <p><strong>Debug Info:</strong></p>
-                      <p>User: {effectiveEmail}</p>
-                      <p>User Decisions: {userMadeDecisions.length}</p>
-                      <p>Available Narratives: {availableDecisions.length}</p>
-                      <p>Completed Decisions: {
-                        sortedNarratives.filter(n => isDecisionCompleted(n.decision_id)).map(n => n.decision_id).join(', ')
-                      }</p>
-                    </div>
-                  </div>
-                )
-              }
-
-              return (
-                <div className="space-y-4">
-                  {decisionsToShow.map((decisionData, index) => {
-                    const { status, userDecision, ...decision } = decisionData
-                    const isCompleted = status === 'completed'
-                    const isAvailable = status === 'available'
-
-                    return (
+          <CardContent>
+            {userMadeDecisions.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">No decisions yet</p>
+                <p className="text-sm mt-2">Start your journey to see your progress here</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {userMadeDecisions.map((decision, index) => {
+                  const isCompleted = decision.complete
+                  const isCurrentDecision = !isCompleted && index === userMadeDecisions.length - 1
+                  
+                  return (
+                    <div
+                      key={decision.id}
+                      className={`border rounded-lg transition-all duration-200 bg-white dark:bg-card ${
+                        isCompleted 
+                          ? "border-green-500 bg-gray-50 dark:bg-gray-800/50 opacity-90" 
+                          : isCurrentDecision
+                          ? "border-blue-500 shadow-md"
+                          : "border-gray-200 dark:border-gray-700"
+                      }`}
+                    >
                       <div
-                        key={userDecision ? `user-${userDecision.id}-${decision.id}` : `narrative-${decision.id}-${status}-${index}`}
-                        className={`border rounded-lg transition-all duration-200 bg-white dark:bg-card ${
-                          isCompleted 
-                            ? "border-green-500 bg-gray-50 dark:bg-gray-800/50 opacity-90" 
-                            : "border-gray-200 dark:border-gray-700"
-                        }`}
+                        className={`p-4 transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                        onClick={() => {
+                          router.push(`/decision/${decision.current_story}?morale=${decision.morale_after}&resources=${decision.resources_after}&condition=${decision.shipcondition_after}`)
+                        }}
                       >
-                        <div
-                          className={`p-4 transition-colors ${
-                            isAvailable || isCompleted ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" : "cursor-default"
-                          }`}
-                          onClick={() => {
-                            if (isAvailable || isCompleted) {
-                              router.push(`/decision/${decision.id}?morale=${currentPlayerStatus.morale}&resources=${currentPlayerStatus.resources}&condition=${currentPlayerStatus.condition}`)
-                            }
-                          }}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-2 flex-1">
-                              <div className="flex items-center space-x-3">
-                                <Badge 
-                                  variant={isCompleted ? "secondary" : isAvailable ? (decision.decision_number === 0 ? "outline" : "default") : "outline"} 
-                                  className={`font-mono text-xs ${decision.decision_number === 0 ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : ''}`}
-                                >
-                                  {decision.decision_number === 0 ? 'START' : `Decision ${decision.decision_number}`}
-                                </Badge>
-                                
-                                <span className="font-semibold text-foreground">
-                                  {decision.decision_title}
-                                </span>
-                                
-                                {isCompleted && userDecision && (
-                                  <Badge variant="secondary" className="font-mono text-xs text-green-600">
-                                    {new Date(userDecision.created_at).toLocaleDateString()}
-                                  </Badge>
-                                )}
-                                
-                                {isAvailable && !isCompleted && (
-                                  <Badge variant="default" className="font-mono text-xs">
-                                    {decision.decision_id?.includes('FINAL_') ? 'Final Outcome' : '➤ New Story Available'}
-                                  </Badge>
-                                )}
-                              </div>
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center space-x-3">
+                              <Badge 
+                                variant={isCompleted ? "secondary" : isCurrentDecision ? "default" : "outline"} 
+                                className={`font-mono text-xs ${decision.current_sequence === 1 ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : ''}`}
+                              >
+                                {decision.current_sequence === 1 ? 'START' : `Decision ${decision.current_sequence}`}
+                              </Badge>
                               
-                              <p className="text-sm text-muted-foreground">
-                                {decision.decision_description || (decision.decision_text ? decision.decision_text.substring(0, 120) + "..." : "No description available")}
-                              </p>
+                              <span className="font-semibold text-foreground">
+                                {decision.decision_id || 'Decision'}
+                              </span>
+                              
+                              {isCompleted && (
+                                <Badge variant="secondary" className="font-mono text-xs text-green-600">
+                                  Completed
+                                </Badge>
+                              )}
+                              
+                              {isCurrentDecision && (
+                                <Badge variant="default" className="font-mono text-xs">
+                                  ➤ Continue Story
+                                </Badge>
+                              )}
                             </div>
                             
-                            {(isAvailable || isCompleted) && (
-                              <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
-                            )}
+                            <p className="text-sm text-muted-foreground">
+                              Click to {isCompleted ? 'review' : 'continue'} this decision
+                            </p>
                           </div>
+                          
+                          <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              )
-            })()}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -977,13 +706,21 @@ export default function HomePage() {
               <CardTitle className="text-sm font-medium">Crew Health</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold mb-2">
-                <span className={`font-bold ${getStatusColor(currentPlayerStatus.condition)}`}>
-                  {formatPercentage(currentPlayerStatus.condition)}%
-                </span>
-              </div>
-              <Progress value={formatPercentage(currentPlayerStatus.condition)} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-2 font-mono">Hull integrity and systems status</p>
+              {currentPlayerStatus.condition === 0 || !currentPlayerStatus.condition ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p>No data</p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold mb-2">
+                    <span className={`font-bold ${getStatusColor(currentPlayerStatus.condition)}`}>
+                      {formatPercentage(currentPlayerStatus.condition)}%
+                    </span>
+                  </div>
+                  <Progress value={formatPercentage(currentPlayerStatus.condition)} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-2 font-mono">Physical condition of the crew</p>
+                </>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -991,13 +728,21 @@ export default function HomePage() {
               <CardTitle className="text-sm font-medium">Crew Morale</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold mb-2">
-                <span className={`font-bold ${getStatusColor(currentPlayerStatus.morale)}`}>
-                  {formatPercentage(currentPlayerStatus.morale)}%
-                </span>
-              </div>
-              <Progress value={formatPercentage(currentPlayerStatus.morale)} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-2 font-mono">Team spirit and loyalty levels</p>
+              {currentPlayerStatus.morale === 0 || !currentPlayerStatus.morale ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p>No data</p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold mb-2">
+                    <span className={`font-bold ${getStatusColor(currentPlayerStatus.morale)}`}>
+                      {formatPercentage(currentPlayerStatus.morale)}%
+                    </span>
+                  </div>
+                  <Progress value={formatPercentage(currentPlayerStatus.morale)} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-2 font-mono">Team spirit and motivation</p>
+                </>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -1005,10 +750,18 @@ export default function HomePage() {
               <CardTitle className="text-sm font-medium">Resources</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold mb-2">
-                <span className={getStatusColor(currentPlayerStatus.resources)}>{currentPlayerStatus.resources}</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2 font-mono">Food, Fresh Water, and Supplies</p>
+              {currentPlayerStatus.resources === 0 || !currentPlayerStatus.resources ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p>No data</p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold mb-2">
+                    <span className={getStatusColor(currentPlayerStatus.resources)}>{currentPlayerStatus.resources}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2 font-mono">Food, water, and supplies</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1020,40 +773,51 @@ export default function HomePage() {
             <CardDescription>Top survivors on the island, ranked by overall status.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[50px]">Rank</TableHead>
-                  <TableHead>Crew Name</TableHead>
-                  <TableHead>Last Known Action</TableHead>
-                  <TableHead className="text-right">Morale</TableHead>
-                  <TableHead className="text-right">Resources</TableHead>
-                  <TableHead className="text-right">Condition</TableHead>
-                  <TableHead className="text-right">Score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leaderboard.slice(0, 5).map((entry) => (
-                  <TableRow key={entry.id} className={entry.email === effectiveEmail ? "bg-blue-50 dark:bg-blue-950/20" : "bg-white dark:bg-gray-950"}>
-                    <TableCell className="font-mono">{entry.rank}</TableCell>
-                    <TableCell className="font-medium">
-                      {entry.email === effectiveEmail ? "You" : (entry.crew_name || entry.email.split("@")[0])}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground font-mono">{entry.decision_name}</TableCell>
-                    <TableCell className={`text-right font-mono ${getStatusColor(entry.crewmoral)}`}>
-                      {formatPercentage(entry.crewmoral)}%
-                    </TableCell>
-                    <TableCell className={`text-right font-mono ${getStatusColor(entry.resources)}`}>
-                      {entry.resources}
-                    </TableCell>
-                    <TableCell className={`text-right font-mono ${getStatusColor(entry.shipcondition)}`}>
-                      {formatPercentage(entry.shipcondition)}%
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-bold">{Math.round(entry.total_score)}</TableCell>
+            {leaderboard.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p className="text-lg">No leaderboard data available</p>
+                <p className="text-sm mt-2">Complete decisions to appear on the leaderboard</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50px]">Rank</TableHead>
+                    <TableHead>Crew Name</TableHead>
+                    <TableHead>Last Decision</TableHead>
+                    <TableHead className="text-right">Morale</TableHead>
+                    <TableHead className="text-right">Resources</TableHead>
+                    <TableHead className="text-right">Condition</TableHead>
+                    <TableHead className="text-right">Score</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {leaderboard.slice(0, 10).map((entry, index) => (
+                    <TableRow key={entry.id || `leaderboard-${index}-${entry.email}`} className={entry.email === effectiveEmail ? "bg-blue-50 dark:bg-blue-950/20" : ""}>
+                      <TableCell className="font-mono">{entry.rank}</TableCell>
+                      <TableCell className="font-medium">
+                        {entry.email === effectiveEmail ? "You" : (entry.crew_name || entry.email?.split("@")[0] || "Unknown")}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {entry.decision_name || entry.decision_id || "No decision"}
+                      </TableCell>
+                      <TableCell className={`text-right font-mono ${getStatusColor(entry.morale_after || entry.crewmoral || 0)}`}>
+                        {formatPercentage(entry.morale_after || entry.crewmoral || 0)}%
+                      </TableCell>
+                      <TableCell className={`text-right font-mono ${getStatusColor(entry.resources_after || entry.resources || 0)}`}>
+                        {entry.resources_after || entry.resources || 0}
+                      </TableCell>
+                      <TableCell className={`text-right font-mono ${getStatusColor(entry.shipcondition_after || entry.condition_after || entry.shipcondition || 0)}`}>
+                        {formatPercentage(entry.shipcondition_after || entry.condition_after || entry.shipcondition || 0)}%
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-bold">
+                        {Math.round(entry.total_score || 0)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>

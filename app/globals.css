@@ -50,15 +50,26 @@
 
 /* Print Styles */
 @media print {
-  /* Hide navigation and other UI elements */
-  nav, .print\\:hidden, [class*="print:hidden"] {
+  /* Hide navigation, buttons, and other UI elements */
+  nav, button, .print\\:hidden, [class*="print:hidden"] {
+    display: none !important;
+  }
+  
+  /* Hide hero image and backgrounds */
+  img, .hero-image, [class*="hero"] {
     display: none !important;
   }
   
   /* Remove shadows and backgrounds for better printing */
   *, *::before, *::after {
     box-shadow: none !important;
-    background: transparent !important;
+    text-shadow: none !important;
+  }
+  
+  /* Keep text black on white */
+  body, .prose, p, h1, h2, h3, h4, h5, h6, span, div {
+    color: black !important;
+    background: white !important;
   }
   
   /* Ensure proper page breaks */
@@ -72,31 +83,45 @@
   
   /* Set proper margins for print */
   @page {
-    margin: 1in;
+    margin: 0.75in;
   }
   
   body {
-    font-size: 12pt;
-    line-height: 1.4;
+    font-size: 10pt !important;
+    line-height: 1.3 !important;
     color: black !important;
   }
   
-  /* Show page title in print */
-  .print-title {
-    display: block !important;
-    font-size: 18pt;
-    font-weight: bold;
-    margin-bottom: 12pt;
-    text-align: center;
-    border-bottom: 1pt solid black;
-    padding-bottom: 6pt;
+  /* Make prose text smaller */
+  .prose {
+    font-size: 9pt !important;
+    line-height: 1.3 !important;
+    max-width: 100% !important;
   }
   
-  .print-subtitle {
-    display: block !important;
-    font-size: 12pt;
-    text-align: center;
-    margin-bottom: 18pt;
-    font-style: italic;
+  /* Card styles for print */
+  .card, [class*="card"] {
+    border: 1px solid #ccc !important;
+    margin-bottom: 12pt !important;
+    padding: 8pt !important;
+    background: white !important;
+  }
+  
+  /* Show title at top */
+  h1 {
+    font-size: 16pt !important;
+    margin-bottom: 8pt !important;
+    text-align: center !important;
+  }
+  
+  h2 {
+    font-size: 12pt !important;
+    margin-top: 8pt !important;
+    margin-bottom: 6pt !important;
+  }
+  
+  /* Hide all status bars and progress indicators */
+  .progress, [class*="progress"] {
+    display: none !important;
   }
 }
