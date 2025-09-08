@@ -50,78 +50,92 @@
 
 /* Print Styles */
 @media print {
-  /* Hide navigation, buttons, and other UI elements */
-  nav, button, .print\\:hidden, [class*="print:hidden"] {
+  /* Hide all UI elements except content */
+  nav, header, .nav, .navbar, .navigation,
+  button, .print\\:hidden, [class*="print:hidden"],
+  img, .hero-image, [class*="hero"],
+  .progress, [class*="progress"],
+  [class*="badge"], [class*="card-header"],
+  [class*="grid"], .grid, .impact-display,
+  .choice-cards, .final-score-cards,
+  .sidebar, [class*="sidebar"],
+  /* Target specific navigation component */
+  [data-testid*="nav"], [class*="Navigation"],
+  /* Hide any fixed/sticky elements */
+  [class*="fixed"], [class*="sticky"] {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  
+  /* Hide specific decision page elements */
+  .hero-section, .choice-section, .impact-section,
+  .return-button, .print-button {
     display: none !important;
   }
   
-  /* Hide hero image and backgrounds */
-  img, .hero-image, [class*="hero"] {
-    display: none !important;
-  }
-  
-  /* Remove shadows and backgrounds for better printing */
+  /* Remove all borders, shadows, and backgrounds */
   *, *::before, *::after {
+    border: none !important;
     box-shadow: none !important;
     text-shadow: none !important;
+    background: white !important;
   }
   
-  /* Keep text black on white */
+  /* Clean text styling */
   body, .prose, p, h1, h2, h3, h4, h5, h6, span, div {
     color: black !important;
     background: white !important;
   }
   
-  /* Ensure proper page breaks */
-  article, .decision-content {
-    page-break-inside: avoid;
-  }
-  
-  h1, h2, h3 {
-    page-break-after: avoid;
-  }
-  
-  /* Set proper margins for print */
+  /* Set minimal margins for print */
   @page {
-    margin: 0.75in;
+    margin: 0.5in;
   }
   
   body {
-    font-size: 10pt !important;
-    line-height: 1.3 !important;
+    font-size: 11pt !important;
+    line-height: 1.4 !important;
     color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   
-  /* Make prose text smaller */
+  /* Clean prose styling */
   .prose {
-    font-size: 9pt !important;
-    line-height: 1.3 !important;
+    font-size: 11pt !important;
+    line-height: 1.4 !important;
     max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   
-  /* Card styles for print */
-  .card, [class*="card"] {
-    border: 1px solid #ccc !important;
-    margin-bottom: 12pt !important;
-    padding: 8pt !important;
-    background: white !important;
-  }
-  
-  /* Show title at top */
+  /* Title styling */
   h1 {
-    font-size: 16pt !important;
-    margin-bottom: 8pt !important;
-    text-align: center !important;
+    font-size: 18pt !important;
+    margin: 0 0 16pt 0 !important;
+    text-align: left !important;
+    font-weight: bold !important;
   }
   
-  h2 {
-    font-size: 12pt !important;
-    margin-top: 8pt !important;
-    margin-bottom: 6pt !important;
+  /* Story content styling */
+  .story-content {
+    margin: 16pt 0 !important;
+    padding: 0 !important;
   }
   
-  /* Hide all status bars and progress indicators */
-  .progress, [class*="progress"] {
-    display: none !important;
+  /* Remove all card styling */
+  .card, [class*="card"] {
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
+  }
+  
+  /* Ensure only story content shows */
+  .container {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 }

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { useSession } from "next-auth/react"
 import { DecisionConfirmationModal } from "@/components/decision-confirmation-modal"
@@ -598,20 +599,58 @@ export default function DecisionPage() {
     }
   }
 
-  if (loading || sessionStatus === 'loading') {
+  if (loading || sessionStatus === 'loading' || !decisionData) {
     return (
       <div className="container mx-auto p-6 max-w-6xl">
-        <div className="animate-pulse">
-          <p className="text-center mb-4">
-            {sessionStatus === 'loading' ? 'Loading session...' : 'Loading story data...'}
-          </p>
-          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
-          <div className="h-64 bg-gray-200 rounded mb-6"></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="h-24 bg-gray-200 rounded"></div>
-            <div className="h-24 bg-gray-200 rounded"></div>
-            <div className="h-24 bg-gray-200 rounded"></div>
+        {/* Hero Image Skeleton */}
+        <div className="relative w-full h-64 md:h-96 mb-6 rounded-lg overflow-hidden">
+          <Skeleton className="w-full h-full" />
+        </div>
+
+        {/* Main Story Card Skeleton */}
+        <Card className="mb-6">
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <Skeleton className="h-6 w-3/4" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+              <Skeleton className="h-4 w-4/5" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Choice Cards Skeleton */}
+        <div className="mb-6">
+          <Skeleton className="h-8 w-48 mb-4" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-full mt-2" />
+                <Skeleton className="h-4 w-2/3" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-full mt-2" />
+                <Skeleton className="h-4 w-2/3" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
           </div>
+        </div>
+
+        {/* Return Button Skeleton */}
+        <div className="mt-8">
+          <Skeleton className="h-12 w-full max-w-xs mx-auto" />
         </div>
       </div>
     )
@@ -663,9 +702,13 @@ export default function DecisionPage() {
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
+      {/* Print-only title */}
+      <h1 className="hidden print:block text-left text-2xl font-bold mb-6">
+        {decisionData.decision_title}
+      </h1>
           {/* Hero Image */}
       {decisionData.hero_image && (
-        <div className="relative w-full h-64 md:h-96 mb-6 rounded-lg overflow-hidden">
+        <div className="relative w-full h-64 md:h-96 mb-6 rounded-lg overflow-hidden print:hidden">
           <img 
             src={decisionData.hero_image} 
             alt={decisionData.decision_title}
@@ -757,7 +800,7 @@ export default function DecisionPage() {
       {/* Final Ending Message */}
       {isFinalEnding && (
         <>
-          <Card className="mb-6">
+          <Card className="mb-6 print:hidden">
             <CardHeader>
               <CardTitle className="text-2xl">
                 The End of Your Island Journey
@@ -771,7 +814,7 @@ export default function DecisionPage() {
           </Card>
 
           {/* Final Score Cards */}
-          <div className="mb-6">
+          <div className="mb-6 print:hidden">
             <h2 className="text-2xl font-bold mb-4">Your Final Status</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Final Health (Condition) */}
@@ -784,8 +827,8 @@ export default function DecisionPage() {
                     <div className="text-4xl font-bold mb-2">
                       <span className={`${getStatusColor(finalStats?.condition || 0)}`}>
                         {finalStats ? Math.round(finalStats.condition * 100) : 0}%
-                      </span>
-                    </div>
+                    </span>
+                  </div>
                     <p className="text-sm text-muted-foreground">Physical condition of the crew</p>
                   </div>
                 </CardContent>
@@ -801,8 +844,8 @@ export default function DecisionPage() {
                     <div className="text-4xl font-bold mb-2">
                       <span className={`${getStatusColor(finalStats?.morale || 0)}`}>
                         {finalStats ? Math.round(finalStats.morale * 100) : 0}%
-                      </span>
-                    </div>
+                    </span>
+                  </div>
                     <p className="text-sm text-muted-foreground">Team spirit and motivation</p>
                   </div>
                 </CardContent>
@@ -818,8 +861,8 @@ export default function DecisionPage() {
                     <div className="text-4xl font-bold mb-2">
                       <span className={`${getStatusColor(finalStats?.resources || 0)}`}>
                         {finalStats?.resources || 0}
-                      </span>
-                    </div>
+                    </span>
+                  </div>
                     <p className="text-sm text-muted-foreground">Food, water, and supplies</p>
                   </div>
                 </CardContent>
@@ -828,7 +871,7 @@ export default function DecisionPage() {
           </div>
 
           {/* Reset Button */}
-          <div className="text-center">
+          <div className="text-center print:hidden">
             <Button 
               onClick={handleResetGame}
               variant="destructive"
@@ -842,7 +885,7 @@ export default function DecisionPage() {
 
       {/* Choice Cards */}
       {!isFinalEnding && decisionData.next && decisionData.next.length > 0 && (
-        <div>
+        <div className="print:hidden">
           <h2 className="text-2xl font-bold mb-4">What will you do?</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {decisionData.next.map((choice) => (
@@ -892,7 +935,7 @@ export default function DecisionPage() {
 
       {/* Impact Display */}
       {impactData && (
-        <div className="mt-8 mb-12">
+        <div className="mt-8 mb-12 print:hidden">
           <h2 className="text-2xl font-bold mb-4">Impact of this decision:</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Health Card (Condition) */}
@@ -986,7 +1029,7 @@ export default function DecisionPage() {
         )}
 
       {/* Return to Dashboard Button */}
-      <div className="mt-8">
+      <div className="mt-8 print:hidden">
             <Button 
               variant="outline"
               onClick={() => router.push('/')}
