@@ -39,7 +39,12 @@ export function Navigation() {
       <nav className="sticky top-0 z-50 border-b bg-white">
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
+              <img 
+                src="/sailfuture-square (4).webp" 
+                alt="SailFuture Academy" 
+                className="w-8 h-8 rounded-full"
+              />
               <span className="text-xl font-bold">Edge of Survival</span>
               {process.env.NODE_ENV === 'development' && (
                 <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-mono">
