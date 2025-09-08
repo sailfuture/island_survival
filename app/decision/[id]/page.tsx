@@ -534,7 +534,14 @@ export default function DecisionPage() {
   const confirmReset = async () => {
     setIsResetting(true)
     
+    // Immediately navigate to home page and close dialog
+    setShowResetDialog(false)
+    router.push("/")
+    
     try {
+      // Perform reset operations in the background
+      console.log('Starting background reset process...')
+      
       // First, get all user's score records to delete them
       const scoresResponse = await fetch(`${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(userEmail)}`)
       if (scoresResponse.ok) {
@@ -579,17 +586,13 @@ export default function DecisionPage() {
         }
       }
       
+      console.log('Reset process completed successfully')
       toast.success("Game reset successfully! Starting fresh adventure...")
       
-      // Close dialog and reload the page to trigger create_new_story
-      setShowResetDialog(false)
+      // Force a page reload after a short delay to ensure create_new_story runs
       setTimeout(() => {
-        // Force a full page reload to ensure create_new_story POST runs and status cards reset
         window.location.reload()
-        setTimeout(() => {
-          window.location.href = "/"
-        }, 500)
-      }, 1000)
+      }, 2000)
       
     } catch (error) {
       console.error('Error resetting game:', error)
