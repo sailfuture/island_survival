@@ -350,13 +350,44 @@ export default function HomePage() {
               const leaderboardData = await leaderboardResponse.json()
               console.log('leaderboard_values response:', leaderboardData)
               
-              if (Array.isArray(leaderboardData)) {
+              if (leaderboardData && leaderboardData.leaderboard_standings && Array.isArray(leaderboardData.leaderboard_standings)) {
                 // Log the first entry to see the data structure
-                if (leaderboardData.length > 0) {
-                  console.log('First leaderboard entry structure:', leaderboardData[0])
+                if (leaderboardData.leaderboard_standings.length > 0) {
+                  console.log('First leaderboard entry structure:', leaderboardData.leaderboard_standings[0])
                 }
                 
-                // Sort by total_score if not already sorted and add rank
+                // Process the new leaderboard structure
+                const processedLeaderboard = leaderboardData.leaderboard_standings.map((entry: any, index: number) => {
+                  // Calculate total score based on the three stats
+                  const morale = (entry.morale_after || 0) * 100
+                  const resources = entry.resources_after || 0
+                  const condition = (entry.shipcondition_after || 0) * 100
+                  const totalScore = Math.round((morale + condition + (resources * 1.5)) / 3) // Weight resources slightly more
+                  
+                  return {
+                    id: entry[1]?.id || index,
+                    rank: index + 1,
+                    email: entry.email,
+                    crew_name: entry[1]?.crew_name || '',
+                    decision_title: entry[0]?.decision_title || 'Unknown Decision',
+                    decision_id: entry[0]?.decision_id || '',
+                    morale_after: entry.morale_after || 0,
+                    resources_after: entry.resources_after || 0,
+                    shipcondition_after: entry.shipcondition_after || 0,
+                    current_story: entry.current_story || 0,
+                    total_score: totalScore
+                  }
+                })
+                
+                // Sort by total_score and update ranks
+                const sortedLeaderboard = processedLeaderboard
+                  .sort((a, b) => b.total_score - a.total_score)
+                  .map((entry, index) => ({ ...entry, rank: index + 1 }))
+                
+                setLeaderboard(sortedLeaderboard)
+                console.log(`Leaderboard has ${sortedLeaderboard.length} entries`)
+              } else if (Array.isArray(leaderboardData)) {
+                // Fallback for old format
                 const sortedLeaderboard = leaderboardData
                   .sort((a, b) => (b.total_score || 0) - (a.total_score || 0))
                   .map((entry, index) => ({ ...entry, rank: index + 1 }))
@@ -451,11 +482,11 @@ export default function HomePage() {
         })
       }
     } else {
-      // Set initial status for new players
+      // No decisions yet - keep status at 0 until user makes first decision
       setCurrentPlayerStatus({
-        condition: 0.8, // 80%
-        morale: 0.8,    // 80%
-        resources: 65,  // 65 units
+        condition: 0,
+        morale: 0,
+        resources: 0,
       })
       setHasLoadedStatus(true)
     }
@@ -721,7 +752,7 @@ export default function HomePage() {
         <div className="grid gap-6 md:grid-cols-3 mb-8">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Crew Health</CardTitle>
+              <CardTitle className="text-sm font-medium">Health</CardTitle>
             </CardHeader>
             <CardContent>
               {!hasLoadedStatus || currentPlayerStatus.condition === 0 || !currentPlayerStatus.condition ? (
@@ -743,7 +774,7 @@ export default function HomePage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Crew Morale</CardTitle>
+              <CardTitle className="text-sm font-medium">Morale</CardTitle>
             </CardHeader>
             <CardContent>
               {!hasLoadedStatus || currentPlayerStatus.morale === 0 || !currentPlayerStatus.morale ? (
@@ -803,9 +834,9 @@ export default function HomePage() {
                     <TableHead className="w-[50px]">Rank</TableHead>
                     <TableHead>Crew Name</TableHead>
                     <TableHead>Last Decision</TableHead>
+                    <TableHead className="text-right">Health</TableHead>
                     <TableHead className="text-right">Morale</TableHead>
                     <TableHead className="text-right">Resources</TableHead>
-                    <TableHead className="text-right">Condition</TableHead>
                     <TableHead className="text-right">Score</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -817,16 +848,16 @@ export default function HomePage() {
                         {entry.email === effectiveEmail ? "You" : (entry.crew_name || entry.email?.split("@")[0] || "Unknown")}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {entry.decision_name || entry.decision_id || "No decision"}
+                        {entry.decision_title || entry.decision_name || entry.decision_id || "No decision"}
+                      </TableCell>
+                      <TableCell className={`text-right font-mono ${getStatusColor(entry.shipcondition_after || entry.condition_after || entry.shipcondition || 0)}`}>
+                        {formatPercentage(entry.shipcondition_after || entry.condition_after || entry.shipcondition || 0)}%
                       </TableCell>
                       <TableCell className={`text-right font-mono ${getStatusColor(entry.morale_after || entry.crewmoral || 0)}`}>
                         {formatPercentage(entry.morale_after || entry.crewmoral || 0)}%
                       </TableCell>
                       <TableCell className={`text-right font-mono ${getStatusColor(entry.resources_after || entry.resources || 0)}`}>
                         {entry.resources_after || entry.resources || 0}
-                      </TableCell>
-                      <TableCell className={`text-right font-mono ${getStatusColor(entry.shipcondition_after || entry.condition_after || entry.shipcondition || 0)}`}>
-                        {formatPercentage(entry.shipcondition_after || entry.condition_after || entry.shipcondition || 0)}%
                       </TableCell>
                       <TableCell className="text-right font-mono font-bold">
                         {Math.round(entry.total_score || 0)}

@@ -580,10 +580,14 @@ export default function DecisionPage() {
       
       toast.success("Game reset successfully! Starting fresh adventure...")
       
-      // Close dialog and navigate back to home page
+      // Close dialog and reload the page to trigger create_new_story
       setShowResetDialog(false)
       setTimeout(() => {
-        router.push("/")
+        // Force a full page reload to ensure create_new_story POST runs and status cards reset
+        window.location.reload()
+        setTimeout(() => {
+          window.location.href = "/"
+        }, 500)
       }, 1000)
       
     } catch (error) {
@@ -744,7 +748,7 @@ export default function DecisionPage() {
                       )}
                     </CardHeader>
         )}
-                <CardContent>
+                <CardContent className="p-6">
               <MarkdownContent content={decisionData.story} />
                     </CardContent>
                   </Card>
@@ -770,6 +774,23 @@ export default function DecisionPage() {
           <div className="mb-6">
             <h2 className="text-2xl font-bold mb-4">Your Final Status</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Final Health (Condition) */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Final Health</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center">
+                    <div className="text-4xl font-bold mb-2">
+                      <span className={`${getStatusColor(finalStats?.condition || 0)}`}>
+                        {finalStats ? Math.round(finalStats.condition * 100) : 0}%
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Physical condition of the crew</p>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Final Morale */}
               <Card>
                 <CardHeader className="pb-2">
@@ -780,8 +801,8 @@ export default function DecisionPage() {
                     <div className="text-4xl font-bold mb-2">
                       <span className={`${getStatusColor(finalStats?.morale || 0)}`}>
                         {finalStats ? Math.round(finalStats.morale * 100) : 0}%
-                    </span>
-                  </div>
+                      </span>
+                    </div>
                     <p className="text-sm text-muted-foreground">Team spirit and motivation</p>
                   </div>
                 </CardContent>
@@ -800,23 +821,6 @@ export default function DecisionPage() {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">Food, water, and supplies</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Final Condition */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Final Condition</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center">
-                    <div className="text-4xl font-bold mb-2">
-                      <span className={`${getStatusColor(finalStats?.condition || 0)}`}>
-                        {finalStats ? Math.round(finalStats.condition * 100) : 0}%
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">Physical condition of the crew</p>
                   </div>
                 </CardContent>
               </Card>
@@ -888,9 +892,38 @@ export default function DecisionPage() {
 
       {/* Impact Display */}
       {impactData && (
-        <div className="mb-6">
+        <div className="mt-8 mb-12">
           <h2 className="text-2xl font-bold mb-4">Impact of this decision:</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Health Card (Condition) */}
+            {impactData.choice.condition !== 0 && (
+                <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Health</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold mb-2">
+                        <span className={getStatusColor(impactData.newStats.condition)}>
+                          {Math.round(impactData.newStats.condition * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                    <Progress 
+                      value={Math.round(impactData.newStats.condition * 100)} 
+                      className="h-3"
+                    />
+                    {impactData.choice.condition_description && (
+                      <p className="text-xs text-muted-foreground">
+                        {impactData.choice.condition_description}
+                      </p>
+                    )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
             {/* Morale Card */}
             {impactData.choice.morale !== 0 && (
                 <Card>
@@ -898,25 +931,23 @@ export default function DecisionPage() {
                   <CardTitle className="text-lg">Morale</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold mb-2">
-                      {Math.round(impactData.newStats.morale * 100)}%
-                  </div>
-                    <div className="text-sm text-muted-foreground">
-                      <span>{Math.round(impactData.oldStats.morale * 100)}%</span>
-                      <span className="mx-2">→</span>
-                      <span>{Math.round(impactData.newStats.morale * 100)}%</span>
-                  </div>
-                    <div className={`text-sm font-medium mt-1 ${
-                      (impactData.newStats.morale - impactData.oldStats.morale) > 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      ({(impactData.newStats.morale - impactData.oldStats.morale) > 0 ? '+' : ''}{Math.round((impactData.newStats.morale - impactData.oldStats.morale) * 100)}%)
+                  <div className="space-y-3">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold mb-2">
+                        <span className={getStatusColor(impactData.newStats.morale)}>
+                          {Math.round(impactData.newStats.morale * 100)}%
+                        </span>
+                      </div>
                     </div>
+                    <Progress 
+                      value={Math.round(impactData.newStats.morale * 100)} 
+                      className="h-3"
+                    />
                     {impactData.choice.morale_description && (
-                      <p className="text-xs text-muted-foreground mt-2 text-left">
+                      <p className="text-xs text-muted-foreground">
                         {impactData.choice.morale_description}
                       </p>
-                  )}
+                    )}
                     </div>
                   </CardContent>
                 </Card>
@@ -929,54 +960,21 @@ export default function DecisionPage() {
                   <CardTitle className="text-lg">Resources</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold mb-2">
-                      {impactData.newStats.resources}
-                  </div>
-                    <div className="text-sm text-muted-foreground">
-                      <span>{impactData.oldStats.resources}</span>
-                      <span className="mx-2">→</span>
-                      <span>{impactData.newStats.resources}</span>
-                  </div>
-                    <div className={`text-sm font-medium mt-1 ${
-                      (impactData.newStats.resources - impactData.oldStats.resources) > 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      ({(impactData.newStats.resources - impactData.oldStats.resources) > 0 ? '+' : ''}{impactData.newStats.resources - impactData.oldStats.resources})
+                  <div className="space-y-3">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold mb-2">
+                        <span className={getStatusColor(impactData.newStats.resources)}>
+                          {impactData.newStats.resources}
+                        </span>
+                      </div>
                     </div>
+                    <Progress 
+                      value={(impactData.newStats.resources / 150) * 100} 
+                      className="h-3"
+                    />
                     {impactData.choice.resources_description && (
-                      <p className="text-xs text-muted-foreground mt-2 text-left">
+                      <p className="text-xs text-muted-foreground">
                         {impactData.choice.resources_description}
-                      </p>
-                  )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            
-            {/* Condition Card */}
-            {impactData.choice.condition !== 0 && (
-                <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Condition</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold mb-2">
-                      {Math.round(impactData.newStats.condition * 100)}%
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      <span>{Math.round(impactData.oldStats.condition * 100)}%</span>
-                      <span className="mx-2">→</span>
-                      <span>{Math.round(impactData.newStats.condition * 100)}%</span>
-                    </div>
-                    <div className={`text-sm font-medium mt-1 ${
-                      (impactData.newStats.condition - impactData.oldStats.condition) > 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      ({(impactData.newStats.condition - impactData.oldStats.condition) > 0 ? '+' : ''}{Math.round((impactData.newStats.condition - impactData.oldStats.condition) * 100)}%)
-                    </div>
-                    {impactData.choice.condition_description && (
-                      <p className="text-xs text-muted-foreground mt-2 text-left">
-                        {impactData.choice.condition_description}
                       </p>
                     )}
                     </div>
