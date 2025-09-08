@@ -147,6 +147,7 @@ export default function HomePage() {
     morale: 0,
     resources: 0
   })
+  const [hasLoadedStatus, setHasLoadedStatus] = useState(false)
 
   const router = useRouter()
 
@@ -222,13 +223,23 @@ export default function HomePage() {
           
           // Handle the response structure with score_records array
           if (scoresData && scoresData.score_records && Array.isArray(scoresData.score_records)) {
-            setUserMadeDecisions(scoresData.score_records)
-            console.log(`Found ${scoresData.score_records.length} decisions for user:`, email)
+            // Merge decision_title from current_story into score records
+            let enrichedScoreRecords = scoresData.score_records
             
-            // Store the current story data if available
-            if (scoresData.current_story) {
+            if (scoresData.current_story && scoresData.current_story.decision_title) {
               console.log('Current story:', scoresData.current_story)
+              
+              // Add decision_title to score records that match the current story
+              enrichedScoreRecords = scoresData.score_records.map(record => ({
+                ...record,
+                decision_title: record.current_story === scoresData.current_story.id 
+                  ? scoresData.current_story.decision_title 
+                  : record.decision_title
+              }))
             }
+            
+            setUserMadeDecisions(enrichedScoreRecords)
+            console.log(`Found ${enrichedScoreRecords.length} decisions for user:`, email)
           } else if (Array.isArray(scoresData)) {
             // Fallback if API returns array directly
             setUserMadeDecisions(scoresData)
@@ -387,8 +398,11 @@ export default function HomePage() {
   // Separate useEffect to update player status when userMadeDecisions changes
   useEffect(() => {
     if (userMadeDecisions.length > 0) {
+      console.log('🏠 All user decisions:', userMadeDecisions.map(d => ({ id: d.id, complete: d.complete, decision_id: d.decision_id })))
+      
       // Find the latest incomplete record - this represents the user's current location/status
       const incompleteDecisions = userMadeDecisions.filter(d => !d.complete)
+      console.log('🏠 Incomplete decisions found:', incompleteDecisions.length)
       
       if (incompleteDecisions.length > 0) {
         // Use the latest incomplete decision's values (where the user currently is)
@@ -409,6 +423,7 @@ export default function HomePage() {
           morale: latestIncompleteDecision.morale_after || 0,
           resources: latestIncompleteDecision.resources_after || 0,
         })
+        setHasLoadedStatus(true)
         
         console.log('🏠 COMMAND CENTER: Final status set to:', {
           condition: latestIncompleteDecision.shipcondition_after || 0,
@@ -442,6 +457,7 @@ export default function HomePage() {
         morale: 0.8,    // 80%
         resources: 65,  // 65 units
       })
+      setHasLoadedStatus(true)
     }
   }, [userMadeDecisions])
 
@@ -602,7 +618,7 @@ export default function HomePage() {
               <div className="text-lg font-semibold">
                 {userSettings.crew_leader_name || "No leader assigned"}
               </div>
-              <p className="text-xs text-muted-foreground mt-1 font-mono">Your commanding officer</p>
+              <p className="text-xs text-muted-foreground mt-1 font-mono">Your Tribe Chief</p>
             </CardContent>
           </Card>
           <Card>
@@ -615,7 +631,7 @@ export default function HomePage() {
               <div className="text-lg font-semibold">
                 {userSettings.crew_captain_name || "No captain assigned"}
               </div>
-              <p className="text-xs text-muted-foreground mt-1 font-mono">Your ship captain</p>
+              <p className="text-xs text-muted-foreground mt-1 font-mono">Your Tribe Leader</p>
             </CardContent>
           </Card>
         </div>
@@ -635,25 +651,27 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {userMadeDecisions.map((decision, index) => {
+                {userMadeDecisions
+                  .sort((a, b) => (a.story_sequence?.decision_number ?? a.current_sequence ?? 0) - (b.story_sequence?.decision_number ?? b.current_sequence ?? 0))
+                  .map((decision, index) => {
                   const isCompleted = decision.complete
                   const isCurrentDecision = !isCompleted && index === userMadeDecisions.length - 1
                   
                   return (
                     <div
                       key={decision.id}
-                      className={`border rounded-lg transition-all duration-200 bg-white dark:bg-card ${
+                      className={`border rounded-lg transition-all duration-200 ${
                         isCompleted 
-                          ? "border-green-500 bg-gray-50 dark:bg-gray-800/50 opacity-90" 
+                          ? "border-green-500 bg-green-50 dark:bg-green-950/20" 
                           : isCurrentDecision
-                          ? "border-blue-500 shadow-md"
-                          : "border-gray-200 dark:border-gray-700"
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20 shadow-md"
+                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-card"
                       }`}
                     >
                       <div
-                        className={`p-4 transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                        className={`p-4 transition-colors cursor-pointer hover:bg-gray-50/50 dark:hover:bg-gray-800/50`}
                         onClick={() => {
-                          router.push(`/decision/${decision.current_story}?morale=${decision.morale_after}&resources=${decision.resources_after}&condition=${decision.shipcondition_after}`)
+                          router.push(`/decision/${decision.current_story}?morale=${decision.morale_after}&resources=${decision.resources_after}&condition=${decision.shipcondition_after}&user_email=${encodeURIComponent(effectiveEmail)}`)
                         }}
                       >
                         <div className="flex items-center justify-between">
@@ -661,13 +679,13 @@ export default function HomePage() {
                             <div className="flex items-center space-x-3">
                               <Badge 
                                 variant={isCompleted ? "secondary" : isCurrentDecision ? "default" : "outline"} 
-                                className={`font-mono text-xs ${decision.current_sequence === 1 ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : ''}`}
+                                className="font-mono text-xs"
                               >
-                                {decision.current_sequence === 1 ? 'START' : `Decision ${decision.current_sequence}`}
+                                Decision {decision.story_sequence?.decision_number ?? decision.current_sequence ?? 1}
                               </Badge>
                               
                               <span className="font-semibold text-foreground">
-                                {decision.decision_id || 'Decision'}
+                                {decision.story_details?.decision_title || decision.decision_title || decision.decision_id || 'Decision'}
                               </span>
                               
                               {isCompleted && (
@@ -699,16 +717,16 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        {/* Ship Status Cards */}
+        {/* Current Status Cards */}
         <div className="grid gap-6 md:grid-cols-3 mb-8">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Crew Health</CardTitle>
             </CardHeader>
             <CardContent>
-              {currentPlayerStatus.condition === 0 || !currentPlayerStatus.condition ? (
+              {!hasLoadedStatus || currentPlayerStatus.condition === 0 || !currentPlayerStatus.condition ? (
                 <div className="text-center py-4 text-muted-foreground">
-                  <p>No data</p>
+                  <p>{!hasLoadedStatus ? "Loading..." : "No data"}</p>
                 </div>
               ) : (
                 <>
@@ -728,9 +746,9 @@ export default function HomePage() {
               <CardTitle className="text-sm font-medium">Crew Morale</CardTitle>
             </CardHeader>
             <CardContent>
-              {currentPlayerStatus.morale === 0 || !currentPlayerStatus.morale ? (
+              {!hasLoadedStatus || currentPlayerStatus.morale === 0 || !currentPlayerStatus.morale ? (
                 <div className="text-center py-4 text-muted-foreground">
-                  <p>No data</p>
+                  <p>{!hasLoadedStatus ? "Loading..." : "No data"}</p>
                 </div>
               ) : (
                 <>
@@ -750,9 +768,9 @@ export default function HomePage() {
               <CardTitle className="text-sm font-medium">Resources</CardTitle>
             </CardHeader>
             <CardContent>
-              {currentPlayerStatus.resources === 0 || !currentPlayerStatus.resources ? (
+              {!hasLoadedStatus || currentPlayerStatus.resources === 0 || !currentPlayerStatus.resources ? (
                 <div className="text-center py-4 text-muted-foreground">
-                  <p>No data</p>
+                  <p>{!hasLoadedStatus ? "Loading..." : "No data"}</p>
                 </div>
               ) : (
                 <>

@@ -9,6 +9,16 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { useSession } from "next-auth/react"
 import { DecisionConfirmationModal } from "@/components/decision-confirmation-modal"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
 
@@ -111,18 +121,45 @@ export default function DecisionPage() {
   const [isLoadingNext, setIsLoadingNext] = useState(false)
   const [selectedNextDecision, setSelectedNextDecision] = useState<number | null>(null)
   const [confirmedChoiceId, setConfirmedChoiceId] = useState<number | null>(null)
+  const [impactData, setImpactData] = useState<{
+    oldStats: { morale: number; resources: number; condition: number }
+    newStats: { morale: number; resources: number; condition: number }
+    choice: any
+  } | null>(null)
+  const [showResetDialog, setShowResetDialog] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
+  const [finalStats, setFinalStats] = useState<{
+    morale: number
+    resources: number
+    condition: number
+  } | null>(null)
   const [decisionData, setDecisionData] = useState<DecisionDetail | null>(null)
   const [playerStatus, setPlayerStatus] = useState<PlayerStatus>({
-    morale: 0.8,
-    resources: 65,
-    condition: 0.8
+    morale: 0,
+    resources: 0,
+    condition: 0
   })
   const [loading, setLoading] = useState(true)
 
-  const userEmail = session?.user?.email
+  // Get user email from session or URL params as fallback
+  const sessionEmail = session?.user?.email
+  const urlEmail = searchParams.get('user_email') // Add user_email to URL when navigating from home page
+  const userEmail = sessionEmail || urlEmail
   const effectiveEmail = userEmail || 'guest'
   
-  console.log('Decision page session status:', sessionStatus, 'User email:', userEmail)
+  console.log('Decision page session status:', sessionStatus, 'Session email:', sessionEmail, 'URL email:', urlEmail, 'Effective email:', effectiveEmail)
+
+  const getStatusColor = (value: number) => {
+    // Convert decimal to percentage if needed (Xano API uses 0.0-1.0 format)
+    const percentage = value <= 1 ? value * 100 : value
+    if (percentage >= 70) return "text-green-600"
+    if (percentage >= 40) return "text-yellow-600"
+    return "text-red-600"
+  }
+
+  // Check if this is the final ending (decision_number = 6) - moved here to be available earlier
+  const isFinalEnding = decisionData?.decision_number === 6 || 
+    (decisionData?.next && decisionData.next.length === 0 && (decisionData?.decision_number || 0) >= 6)
 
   // Load story data when page mounts
   useEffect(() => {
@@ -253,6 +290,9 @@ export default function DecisionPage() {
         }
         
         // Player status is now set above based on story data or URL params
+        
+        // Check if this decision was already made by the user
+        // We'll do this after loading the decision data to match choices properly
       } catch (error) {
         console.error('Error loading decision data:', error)
         toast.error('Failed to load decision data')
@@ -264,6 +304,90 @@ export default function DecisionPage() {
 
     loadData()
   }, [params.id, searchParams])
+
+  // Check if this decision was already completed by the user
+  useEffect(() => {
+    const checkCompletedDecision = async () => {
+      if (!decisionData || !userEmail || userEmail === 'guest') return
+
+      try {
+        const userScoresResponse = await fetch(`${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(userEmail)}`)
+        if (userScoresResponse.ok) {
+          const userScoresData = await userScoresResponse.json()
+          if (userScoresData.score_records) {
+            // Find a record where the previous_decision matches this story's decision_id
+            const nextDecisionRecord = userScoresData.score_records.find((record: any) => 
+              record.previous_decision === decisionData.decision_id
+            )
+            
+            if (nextDecisionRecord) {
+              console.log('Found next decision record, this decision was completed:', nextDecisionRecord)
+              
+              // Find which choice matches the next story
+              const matchingChoice = decisionData.next.find(choice => 
+                choice.id === nextDecisionRecord.current_story
+              )
+              
+              if (matchingChoice) {
+                console.log('Found matching choice:', matchingChoice)
+                setConfirmedChoiceId(matchingChoice.id)
+                
+                // For completed decisions, we need to get the before values from the current story data
+                // The before values should come from the current decision page's story data
+                setImpactData({
+                  oldStats: {
+                    morale: decisionData.morale,
+                    resources: decisionData.resources,
+                    condition: decisionData.condition
+                  },
+                  newStats: {
+                    morale: nextDecisionRecord.morale_after,
+                    resources: nextDecisionRecord.resources_after,
+                    condition: nextDecisionRecord.shipcondition_after
+                  },
+                  choice: matchingChoice
+                })
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error checking for completed decision:', error)
+      }
+    }
+
+    checkCompletedDecision()
+  }, [decisionData, userEmail])
+
+  // Fetch final stats for ending page
+  useEffect(() => {
+    const fetchFinalStats = async () => {
+      if (!isFinalEnding || !userEmail || userEmail === 'guest') return
+
+      try {
+        const userScoresResponse = await fetch(`${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(userEmail)}`)
+        if (userScoresResponse.ok) {
+          const userScoresData = await userScoresResponse.json()
+          if (userScoresData.score_records && userScoresData.score_records.length > 0) {
+            // Get the latest record (should be the final decision)
+            const latestRecord = userScoresData.score_records.sort((a: any, b: any) => b.created_at - a.created_at)[0]
+            
+            console.log('Final stats from latest record:', latestRecord)
+            
+            setFinalStats({
+              morale: latestRecord.morale_after || 0,
+              resources: latestRecord.resources_after || 0,
+              condition: latestRecord.shipcondition_after || 0
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching final stats:', error)
+      }
+    }
+
+    fetchFinalStats()
+  }, [isFinalEnding, userEmail])
 
   const handleChoiceClick = (choice: NextChoice) => {
     setSelectedNextDecision(choice.id)
@@ -285,10 +409,10 @@ export default function DecisionPage() {
         throw new Error('Selected choice not found')
       }
 
-      // Calculate new stats
+      // Calculate new stats with proper capping
       const newStats: PlayerStatus = {
         morale: Math.max(0, Math.min(1, playerStatus.morale + (selectedChoice.morale || 0))),
-        resources: Math.max(0, Math.min(100, playerStatus.resources + (selectedChoice.resources || 0))),
+        resources: Math.max(0, playerStatus.resources + (selectedChoice.resources || 0)), // No upper limit for resources
         condition: Math.max(0, Math.min(1, playerStatus.condition + (selectedChoice.condition || 0)))
       }
       
@@ -302,21 +426,19 @@ export default function DecisionPage() {
       console.log('User email:', effectiveEmail)
       console.log('Session status in handleConfirmDecision:', sessionStatus, 'Session email:', session?.user?.email)
       
-      // Only post if we have a real user email (not guest)
-      if (effectiveEmail && effectiveEmail !== 'guest' && session?.user?.email) {
+      // Only post if we have a real user email (not guest) - check both session and URL params
+      if (effectiveEmail && effectiveEmail !== 'guest' && userEmail) {
         try {
           const scorePayload = {
-            id: selectedChoice.id,  // The numerical ID of the decision made
+            id: selectedChoice.id,  // The story ID integer (not decision_id text)
             decision_id: selectedChoice.decision_id || '',
-            email: session.user.email,
-        morale_before: playerStatus.morale,
+            email: userEmail,
         morale_after: newStats.morale,
-        resources_before: playerStatus.resources,
         resources_after: newStats.resources,
-            condition_before: playerStatus.condition,
             shipcondition_after: newStats.condition,
             current_story: selectedChoice.id,
             current_sequence: selectedChoice.sequence || selectedChoice.decision_number || 0,
+            decision_number: selectedChoice.decision_number || 0,
             complete: false,
             previous_decision: decisionData.decision_id || '',
             score: 0
@@ -326,9 +448,9 @@ export default function DecisionPage() {
           
           const scoreResponse = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+              headers: {
+                'Content-Type': 'application/json',
+              },
             body: JSON.stringify(scorePayload)
           })
           
@@ -340,40 +462,7 @@ export default function DecisionPage() {
           } else {
             const scoreResult = await scoreResponse.json()
             console.log('Score saved successfully:', scoreResult)
-          }
-          
-          // Now PATCH all previous user records to mark as completed
-          const scoresResponse = await fetch(`${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(session.user.email)}`, {
-            method: 'GET',
-          headers: {
-              'Content-Type': 'application/json',
-            }
-          })
-          
-          if (scoresResponse.ok) {
-            const scoresData = await scoresResponse.json()
-            const scoreRecords = scoresData.score_records || []
-            
-            // PATCH each incomplete record to mark as completed
-            for (const record of scoreRecords) {
-              if (!record.complete) {
-                console.log(`Marking record ${record.id} as complete`)
-                
-                const patchResponse = await fetch(`${XANO_BASE_URL}/island_survival_score/${record.id}`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-                  body: JSON.stringify({
-                    complete: true
-                  })
-                })
-                
-                if (!patchResponse.ok) {
-                  console.error(`Failed to mark record ${record.id} as complete`)
-                }
-              }
-            }
+            console.log('Backend function stack should have marked previous records as complete automatically')
           }
         } catch (error) {
           console.error('Error saving score or marking records as complete:', error)
@@ -390,13 +479,20 @@ export default function DecisionPage() {
       // Mark the choice as confirmed (turn it green)
       setConfirmedChoiceId(selectedChoice.id)
       
+      // Store impact data for display using actual before/after values
+      setImpactData({
+        oldStats: playerStatus,
+        newStats,
+        choice: selectedChoice
+      })
+      
       // Show success message if logged in
       if (effectiveEmail && effectiveEmail !== 'guest' && session?.user?.email) {
         toast.success('Decision saved successfully!')
       }
       
       // Close dialog
-      setShowNextDecisionDialog(false)
+          setShowNextDecisionDialog(false)
     } catch (error) {
       console.error('Error saving decision:', error)
       toast.error('Failed to save decision. Please try again.')
@@ -422,6 +518,79 @@ export default function DecisionPage() {
     } catch (error) {
       console.error('Error starting over:', error)
       toast.error('Failed to reset journey. Please try again.')
+    }
+  }
+
+  const handleResetGame = () => {
+    if (!userEmail || userEmail === 'guest') {
+      toast.error("Please log in to reset your game")
+      return
+    }
+    
+    setShowResetDialog(true)
+  }
+
+  const confirmReset = async () => {
+    setIsResetting(true)
+    
+    try {
+      // First, get all user's score records to delete them
+      const scoresResponse = await fetch(`${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(userEmail)}`)
+      if (scoresResponse.ok) {
+        const scoresData = await scoresResponse.json()
+        if (scoresData.score_records) {
+          // Delete each score record
+          for (const record of scoresData.score_records) {
+            const deleteResponse = await fetch(`${XANO_BASE_URL}/island_survival_score/${record.id}`, {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            })
+            
+            if (!deleteResponse.ok) {
+              console.error(`Failed to delete score record ${record.id}`)
+            }
+          }
+        }
+      }
+      
+      // Delete user settings
+      const settingsResponse = await fetch(`${XANO_BASE_URL}/island_survival_settings?email=${encodeURIComponent(userEmail)}`)
+      if (settingsResponse.ok) {
+        const settingsData = await settingsResponse.json()
+        if (Array.isArray(settingsData)) {
+          // Delete each settings record for this user
+          for (const setting of settingsData) {
+            if (setting.email === userEmail) {
+              const deleteSettingsResponse = await fetch(`${XANO_BASE_URL}/island_survival_settings/${setting.id}`, {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                }
+              })
+              
+              if (!deleteSettingsResponse.ok) {
+                console.error(`Failed to delete settings record ${setting.id}`)
+              }
+            }
+          }
+        }
+      }
+      
+      toast.success("Game reset successfully! Starting fresh adventure...")
+      
+      // Close dialog and navigate back to home page
+      setShowResetDialog(false)
+      setTimeout(() => {
+        router.push("/")
+      }, 1000)
+      
+    } catch (error) {
+      console.error('Error resetting game:', error)
+      toast.error('Failed to reset game. Please try again.')
+    } finally {
+      setIsResetting(false)
     }
   }
 
@@ -481,7 +650,8 @@ export default function DecisionPage() {
     title: decisionData.decision_title,
     hasStory: !!decisionData.story,
     hasHeroImage: !!decisionData.hero_image,
-    nextChoices: decisionData.next?.length || 0
+    nextChoices: decisionData.next?.length || 0,
+    isFinalEnding
   })
 
   // Show login prompt if user is not authenticated
@@ -532,7 +702,7 @@ export default function DecisionPage() {
             )}
                 </div>
               </div>
-      )}
+              )}
 
       {/* Buttons when no hero image */}
       {!decisionData.hero_image && (
@@ -557,38 +727,122 @@ export default function DecisionPage() {
             </svg>
             Print
                         </Button>
-          </div>
-        )}
+                        </div>
+                      )}
 
       {/* Main Story Card */}
       <Card className="mb-6">
-        <CardHeader>
-          {!decisionData.hero_image && (
-            <>
-              <CardTitle className="text-3xl font-bold">
+        {!decisionData.hero_image && (
+          <CardHeader>
+            <CardTitle className="text-3xl font-bold">
                 {decisionData.decision_title}
                   </CardTitle>
-              {decisionData.decision_description && (
-                <CardDescription className="text-lg mt-2">
-                  {decisionData.decision_description}
-                </CardDescription>
-              )}
-            </>
-          )}
+            {decisionData.decision_description && (
+              <CardDescription className="text-lg mt-2">
+                {decisionData.decision_description}
+                        </CardDescription>
+                      )}
+                    </CardHeader>
+        )}
+                <CardContent>
+              <MarkdownContent content={decisionData.story} />
+                    </CardContent>
+                  </Card>
+
+
+      {/* Final Ending Message */}
+      {isFinalEnding && (
+        <>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-2xl">
+                The End of Your Island Journey
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-lg mb-4">
+                Congratulations! You have reached the end of your survival story. Your choices have shaped your destiny on the island.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Final Score Cards */}
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold mb-4">Your Final Status</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Final Morale */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Final Morale</CardTitle>
                 </CardHeader>
                 <CardContent>
-          <MarkdownContent content={decisionData.story} />
+                  <div className="text-center">
+                    <div className="text-4xl font-bold mb-2">
+                      <span className={`${getStatusColor(finalStats?.morale || 0)}`}>
+                        {finalStats ? Math.round(finalStats.morale * 100) : 0}%
+                    </span>
+                  </div>
+                    <p className="text-sm text-muted-foreground">Team spirit and motivation</p>
+                  </div>
                 </CardContent>
               </Card>
 
+              {/* Final Resources */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Final Resources</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center">
+                    <div className="text-4xl font-bold mb-2">
+                      <span className={`${getStatusColor(finalStats?.resources || 0)}`}>
+                        {finalStats?.resources || 0}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Food, water, and supplies</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Final Condition */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Final Condition</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center">
+                    <div className="text-4xl font-bold mb-2">
+                      <span className={`${getStatusColor(finalStats?.condition || 0)}`}>
+                        {finalStats ? Math.round(finalStats.condition * 100) : 0}%
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Physical condition of the crew</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Reset Button */}
+          <div className="text-center">
+            <Button 
+              onClick={handleResetGame}
+              variant="destructive"
+              size="lg"
+            >
+              Start New Adventure
+            </Button>
+          </div>
+        </>
+      )}
 
       {/* Choice Cards */}
-      {decisionData.next && decisionData.next.length > 0 && (
+      {!isFinalEnding && decisionData.next && decisionData.next.length > 0 && (
         <div>
           <h2 className="text-2xl font-bold mb-4">What will you do?</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {decisionData.next.map((choice) => (
-              <Card 
+                  <Card 
                 key={choice.id}
                 className={`cursor-pointer hover:shadow-lg transition-all ${
                   confirmedChoiceId === choice.id 
@@ -601,8 +855,8 @@ export default function DecisionPage() {
                   <CardTitle className="text-xl">{choice.decision_title}</CardTitle>
                   <CardDescription className="text-base mt-2">
                     {choice.decision_choice || choice.decision_description}
-                  </CardDescription>
-                </CardHeader>
+                        </CardDescription>
+                    </CardHeader>
                 <CardContent>
                   {confirmedChoiceId === choice.id ? (
                     <div className="flex items-center justify-center text-green-600 font-semibold">
@@ -610,11 +864,11 @@ export default function DecisionPage() {
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
                       Decision Confirmed
-                  </div>
+                    </div>
                   ) : (
-                    <Button 
+                        <Button 
                       className="w-full" 
-                      size="lg"
+                          size="lg"
                       variant="outline"
                       disabled={!!confirmedChoiceId}
                       onClick={(e) => {
@@ -623,11 +877,112 @@ export default function DecisionPage() {
                       }}
                     >
                       Choose this option →
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
+                        </Button>
+                      )}
+                  </CardContent>
+                </Card>
             ))}
+            </div>
+          </div>
+        )}
+
+      {/* Impact Display */}
+      {impactData && (
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold mb-4">Impact of this decision:</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Morale Card */}
+            {impactData.choice.morale !== 0 && (
+                <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Morale</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold mb-2">
+                      {Math.round(impactData.newStats.morale * 100)}%
+                  </div>
+                    <div className="text-sm text-muted-foreground">
+                      <span>{Math.round(impactData.oldStats.morale * 100)}%</span>
+                      <span className="mx-2">→</span>
+                      <span>{Math.round(impactData.newStats.morale * 100)}%</span>
+                  </div>
+                    <div className={`text-sm font-medium mt-1 ${
+                      (impactData.newStats.morale - impactData.oldStats.morale) > 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      ({(impactData.newStats.morale - impactData.oldStats.morale) > 0 ? '+' : ''}{Math.round((impactData.newStats.morale - impactData.oldStats.morale) * 100)}%)
+                    </div>
+                    {impactData.choice.morale_description && (
+                      <p className="text-xs text-muted-foreground mt-2 text-left">
+                        {impactData.choice.morale_description}
+                      </p>
+                  )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            
+            {/* Resources Card */}
+            {impactData.choice.resources !== 0 && (
+                <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Resources</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold mb-2">
+                      {impactData.newStats.resources}
+                  </div>
+                    <div className="text-sm text-muted-foreground">
+                      <span>{impactData.oldStats.resources}</span>
+                      <span className="mx-2">→</span>
+                      <span>{impactData.newStats.resources}</span>
+                  </div>
+                    <div className={`text-sm font-medium mt-1 ${
+                      (impactData.newStats.resources - impactData.oldStats.resources) > 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      ({(impactData.newStats.resources - impactData.oldStats.resources) > 0 ? '+' : ''}{impactData.newStats.resources - impactData.oldStats.resources})
+                    </div>
+                    {impactData.choice.resources_description && (
+                      <p className="text-xs text-muted-foreground mt-2 text-left">
+                        {impactData.choice.resources_description}
+                      </p>
+                  )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            
+            {/* Condition Card */}
+            {impactData.choice.condition !== 0 && (
+                <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Condition</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold mb-2">
+                      {Math.round(impactData.newStats.condition * 100)}%
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <span>{Math.round(impactData.oldStats.condition * 100)}%</span>
+                      <span className="mx-2">→</span>
+                      <span>{Math.round(impactData.newStats.condition * 100)}%</span>
+                    </div>
+                    <div className={`text-sm font-medium mt-1 ${
+                      (impactData.newStats.condition - impactData.oldStats.condition) > 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      ({(impactData.newStats.condition - impactData.oldStats.condition) > 0 ? '+' : ''}{Math.round((impactData.newStats.condition - impactData.oldStats.condition) * 100)}%)
+                    </div>
+                    {impactData.choice.condition_description && (
+                      <p className="text-xs text-muted-foreground mt-2 text-left">
+                        {impactData.choice.condition_description}
+                      </p>
+                    )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         )}
@@ -656,6 +1011,41 @@ export default function DecisionPage() {
           isSubmitting={isLoadingNext}
           currentStats={playerStatus}
         />
+
+        {/* Reset Game Confirmation Modal */}
+        <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset Your Entire Game?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete ALL your progress and settings. You will lose:
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="my-4">
+              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                <li>All decision records and story progress</li>
+                <li>Your crew settings and names</li>
+                <li>Your position on the leaderboard</li>
+                <li>All saved game data</li>
+              </ul>
+              <p className="mt-4 text-sm font-semibold text-destructive">
+                This action cannot be undone.
+              </p>
+      </div>
+            <AlertDialogFooter className="flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
+              <AlertDialogCancel disabled={isResetting}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={confirmReset}
+                disabled={isResetting}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                {isResetting ? "Resetting..." : "Yes, Reset Everything"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
     </div>
   )
 }
