@@ -1,6 +1,6 @@
 "use client"
 
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect } from "react"
 import { Navigation } from "./navigation"
 import { useCurrentUser } from "@/hooks/use-current-user"
@@ -8,25 +8,29 @@ import { useCurrentUser } from "@/hooks/use-current-user"
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { isAuthenticated, isLoading } = useCurrentUser()
   
   // Development bypass - skip authentication redirect in development
   const isDevelopment = process.env.NODE_ENV === 'development'
   
-  // Redirect unauthenticated users to login page (skip in development)
+  // Check if this is a public view (no authentication required)
+  const isPublicView = searchParams.get('public') === 'true'
+  
+  // Redirect unauthenticated users to login page (skip in development or public view)
   useEffect(() => {
-    if (!isDevelopment && !isLoading && !isAuthenticated && pathname !== "/login" && pathname !== "/access-denied") {
+    if (!isDevelopment && !isPublicView && !isLoading && !isAuthenticated && pathname !== "/login" && pathname !== "/access-denied") {
       router.push("/login")
     }
-  }, [isAuthenticated, isLoading, pathname, router, isDevelopment])
+  }, [isAuthenticated, isLoading, pathname, router, isDevelopment, isPublicView])
   
-  // Don't show navigation on login page or access denied page
-  if (pathname === "/login" || pathname === "/access-denied") {
+  // Don't show navigation on login page, access denied page, or public view
+  if (pathname === "/login" || pathname === "/access-denied" || isPublicView) {
     return <>{children}</>
   }
   
-  // Show loading state while checking authentication (skip in development)
-  if (!isDevelopment && isLoading) {
+  // Show loading state while checking authentication (skip in development or public view)
+  if (!isDevelopment && !isPublicView && isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -34,8 +38,8 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
     )
   }
   
-  // Don't render content if not authenticated (skip in development)
-  if (!isDevelopment && !isAuthenticated) {
+  // Don't render content if not authenticated (skip in development or public view)
+  if (!isDevelopment && !isPublicView && !isAuthenticated) {
     return null
   }
   

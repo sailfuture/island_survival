@@ -8,14 +8,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { useCurrentUser } from "@/hooks/use-current-user"
 
+const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
+
 interface UserSettings {
   id: number
-  created_at: number
+  created_at?: number
   email: string
   crew_leader_name: string
   crew_name: string
   crew_captain_name: string
   vessel_name: string
+  stories_id: number
   role_1?: string
   role_2?: string
   role_3?: string
@@ -44,13 +47,12 @@ const initialFormState: SettingsFormState = {
   crewCaptainName: "",
 }
 
-const API_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
-
 interface SettingsFormProps {
   onFormSubmitSuccess: () => void
+  storiesId: number
 }
 
-export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
+export function SettingsForm({ onFormSubmitSuccess, storiesId }: SettingsFormProps) {
   const [formState, setFormState] = useState<SettingsFormState>(initialFormState)
   const [isLoading, setIsLoading] = useState(false)
   const [isFetchingSettings, setIsFetchingSettings] = useState(false)
@@ -59,26 +61,28 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
   
   useEffect(() => {
     async function fetchSettings() {
-      if (!userEmail) return
+      if (!userEmail || !storiesId) return
       
       setIsFetchingSettings(true)
       try {
-        const response = await fetch(`${API_BASE_URL}/island_survival_settings`)
+        const response = await fetch(
+          `${XANO_BASE_URL}/island_survival_settings?stories_id=${storiesId}&user_email=${encodeURIComponent(userEmail)}`
+        )
         if (response.ok) {
           const data = await response.json()
-          console.log('All settings data fetched:', data)
+          console.log('Settings data fetched:', data)
           
-          // Filter settings by the current user's email
+          // The API should return filtered data, but add client-side filtering as safety measure
           const userSettings = Array.isArray(data) 
-            ? data.filter((setting: UserSettings) => setting.email === userEmail) 
-            : data.email === userEmail ? [data] : []
+            ? data.filter((s: any) => s.email === userEmail && s.stories_id === storiesId)
+            : (data.id && data.email === userEmail && data.stories_id === storiesId) ? [data] : []
           
-          console.log('User settings filtered:', userSettings)
+          console.log('Filtered user settings for', userEmail, 'story', storiesId, ':', userSettings)
           
           if (userSettings.length > 0) {
-            // Get the most recent entry (highest created_at or highest id)
+            // Get the most recent entry
             const latestSettings = userSettings.reduce((latest, current) => {
-              return current.created_at > latest.created_at ? current : latest
+              return (current.created_at || 0) > (latest.created_at || 0) ? current : latest
             })
             
             console.log('Using latest settings:', latestSettings)
@@ -97,7 +101,7 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
             setFormState(initialFormState)
           }
         } else {
-          console.error('Failed to fetch settings:', response.statusText)
+          console.error('Failed to fetch settings:', response.status, response.statusText)
           setFormState(initialFormState)
         }
       } catch (error) {
@@ -112,7 +116,7 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
     if (userEmail) {
       fetchSettings()
     }
-  }, [userEmail])
+  }, [userEmail, storiesId])
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -128,14 +132,19 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
     setIsLoading(true)
 
     try {
-      // Use the same update_settings endpoint as crew roles page
+      if (!userEmail) {
+        toast.error("Please log in to save settings.")
+        return
+      }
+
       const updatePayload = {
-        user_email: userEmail,
+        island_survival_settings_id: currentUserSettings?.id || 0,
+        email: userEmail,
         crew_leader_name: formState.crewLeaderName,
         crew_name: formState.crewName,
         crew_captain_name: formState.crewCaptainName,
         vessel_name: formState.vesselName,
-        island_survival_settings2: currentUserSettings?.id || 0,
+        stories_id: storiesId,
         // Preserve existing role assignments
         role_1: currentUserSettings?.role_1 || '',
         role_2: currentUserSettings?.role_2 || '',
@@ -153,27 +162,33 @@ export function SettingsForm({ onFormSubmitSuccess }: SettingsFormProps) {
 
       console.log('Settings form - UPDATE payload:', updatePayload)
       
-      const response = await fetch(`${API_BASE_URL}/update_settings`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatePayload),
+      const url = currentUserSettings?.id 
+        ? `${XANO_BASE_URL}/island_survival_settings/${currentUserSettings.id}`
+        : `${XANO_BASE_URL}/island_survival_settings`
+      
+      const method = currentUserSettings?.id ? 'PATCH' : 'POST'
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatePayload)
       })
-
-      if (response.ok) {
-        const updatedSettings = await response.json()
-        console.log('Settings updated successfully via update_settings:', updatedSettings)
-        toast.success("Settings updated successfully!")
-        onFormSubmitSuccess()
-        
-        // Refresh the page to update all settings data
-        setTimeout(() => {
-          window.location.reload()
-        }, 1000)
-      } else {
-        const errorText = await response.text()
-        console.error('update_settings failed:', response.status, errorText)
-        throw new Error(`Failed to update settings: ${response.statusText}`)
+      
+      if (!response.ok) {
+        throw new Error(`Failed to ${method} settings: ${response.status}`)
       }
+      
+      const updatedSettings = await response.json()
+      console.log('Settings updated successfully:', updatedSettings)
+      toast.success("Settings updated successfully!")
+      onFormSubmitSuccess()
+      
+      // Refresh the page to update all settings data
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
     } catch (error) {
       console.error("Error submitting settings:", error)
       toast.error("Could not submit settings.")

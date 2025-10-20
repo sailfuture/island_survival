@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -12,6 +13,8 @@ import Image from "next/image"
 import { toast } from "sonner"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import { Edit, Check, X } from "lucide-react"
+import { getStoryFromUrl, getStoryConfig } from "@/lib/story-config"
+import { createApiService } from "@/lib/api-service"
 
 interface CrewRole {
   id: number
@@ -34,6 +37,7 @@ interface UserSettings {
   crew_name: string
   crew_leader_name: string
   crew_captain_name: string
+  stories_id: number
   role_1?: string
   role_2?: string
   role_3?: string
@@ -48,9 +52,19 @@ interface UserSettings {
   role_12?: string
 }
 
-const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
+// Remove hardcoded XANO_BASE_URL - now using dynamic API service
 
 export default function CrewRolesPage() {
+  const searchParams = useSearchParams()
+  const currentStory = getStoryFromUrl(searchParams)
+  const storyConfig = getStoryConfig(currentStory)
+  
+  // Get stories_id from URL params
+  const storiesIdParam = searchParams.get('stories_id')
+  const storiesId = storiesIdParam ? parseInt(storiesIdParam) : 1
+  
+  const apiService = createApiService(currentStory, storiesId)
+
   const [roles, setRoles] = useState<CrewRole[]>([])
   const [loading, setLoading] = useState(true)
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null)
@@ -73,8 +87,8 @@ export default function CrewRolesPage() {
     async function fetchData() {
       try {
         // Fetch roles
-        const rolesResponse = await fetch(`${XANO_BASE_URL}/island_survival_roles`)
-        const rolesData = await rolesResponse.json()
+        console.log('Fetching roles for story:', currentStory, 'stories_id:', storiesId)
+        const rolesData = await apiService.getRoles(storiesId)
         // Sort roles by role_number for proper ordering
         const sortedRoles = rolesData.sort((a: CrewRole, b: CrewRole) => (a.role_number || 0) - (b.role_number || 0))
         console.log('🎯 Roles loaded with role_numbers:', sortedRoles.map(r => ({
@@ -86,13 +100,18 @@ export default function CrewRolesPage() {
         
         // Fetch user settings if user is logged in
         if (userEmail) {
-          const settingsResponse = await fetch(`${XANO_BASE_URL}/island_survival_settings`)
-          const settingsData = await settingsResponse.json()
+          console.log('Fetching settings for story:', currentStory, 'user:', userEmail, 'stories_id:', storiesId)
+          const settingsData = await apiService.getSettings(storiesId, userEmail)
           
-          // Find current user's settings
+          // Find current user's settings - filter by both email AND stories_id
           const userSettingsArray = Array.isArray(settingsData)
-            ? settingsData.filter((setting: UserSettings) => setting.email === userEmail)
-            : settingsData.email === userEmail ? [settingsData] : []
+            ? settingsData.filter((setting: UserSettings) => 
+                setting.email === userEmail && 
+                setting.stories_id === storiesId
+              )
+            : (settingsData.email === userEmail && settingsData.stories_id === storiesId) ? [settingsData] : []
+          
+          console.log('Filtered settings for', userEmail, 'story', storiesId, ':', userSettingsArray)
 
           if (userSettingsArray.length > 0) {
             const latestSettings = userSettingsArray.reduce((latest: UserSettings, current: UserSettings) => {
@@ -134,7 +153,7 @@ export default function CrewRolesPage() {
       }
     }
     fetchData()
-  }, [userEmail])
+  }, [userEmail, currentStory])
 
   const handleStudentAssignment = (roleNumber: number, studentName: string) => {
     // Fix the key generation - ensure we only have one "role_" prefix
@@ -201,7 +220,7 @@ export default function CrewRolesPage() {
         crew_name: userSettings.crew_name || '',
         crew_captain_name: userSettings.crew_captain_name || '',
         vessel_name: userSettings.vessel_name || '',
-        island_survival_settings2: userSettings.id,
+        island_survival_settings_id: userSettings.id,
         // Include all role assignments
         role_1: currentAssignments.role_1 || '',
         role_2: currentAssignments.role_2 || '',
@@ -219,24 +238,10 @@ export default function CrewRolesPage() {
 
       console.log('Individual assignment save payload:', updatePayload)
 
-      const response = await fetch(`${XANO_BASE_URL}/update_settings`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatePayload),
-      })
-
-      if (response.ok) {
-        const updatedSettings = await response.json()
-        setUserSettings(updatedSettings)
-        toast.success("Assignment saved successfully!")
-        console.log('Assignment saved to database:', updatedSettings)
-      } else {
-        const errorText = await response.text()
-        console.error('Failed to save assignment:', response.status, errorText)
-        toast.error(`Failed to save assignment: ${response.status}`)
-      }
+      const updatedSettings = await apiService.updateSettingsGeneral(updatePayload)
+      setUserSettings(updatedSettings)
+      toast.success("Assignment saved successfully!")
+      console.log('Assignment saved to database:', updatedSettings)
     } catch (error) {
       console.error('Error saving assignment:', error)
       toast.error('Failed to save assignment. Please try again.')
@@ -270,7 +275,7 @@ export default function CrewRolesPage() {
         crew_name: userSettings.crew_name || '',
         crew_captain_name: userSettings.crew_captain_name || '',
         vessel_name: userSettings.vessel_name || '',
-        island_survival_settings2: userSettings.id,
+        island_survival_settings_id: userSettings.id,
         // Include all role assignments
         role_1: currentAssignments.role_1 || '',
         role_2: currentAssignments.role_2 || '',
@@ -288,24 +293,10 @@ export default function CrewRolesPage() {
 
       console.log('Individual assignment removal payload:', updatePayload)
 
-      const response = await fetch(`${XANO_BASE_URL}/update_settings`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatePayload),
-      })
-
-      if (response.ok) {
-        const updatedSettings = await response.json()
-        setUserSettings(updatedSettings)
-        toast.success("Assignment removed successfully!")
-        console.log('Assignment removed from database:', updatedSettings)
-      } else {
-        const errorText = await response.text()
-        console.error('Failed to remove assignment:', response.status, errorText)
-        toast.error(`Failed to remove assignment: ${response.status}`)
-      }
+      const updatedSettings = await apiService.updateSettingsGeneral(updatePayload)
+      setUserSettings(updatedSettings)
+      toast.success("Assignment removed successfully!")
+      console.log('Assignment removed from database:', updatedSettings)
     } catch (error) {
       console.error('Error removing assignment:', error)
       toast.error('Failed to remove assignment. Please try again.')
@@ -335,7 +326,7 @@ export default function CrewRolesPage() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight mb-2">Crew Roles & Student Assignments</h1>
+          <h1 className="text-3xl font-bold tracking-tight mb-2">{storyConfig.theme.terminology.crew} Roles & Student Assignments</h1>
           <p className="text-muted-foreground">
             Assign students to each survival role. Each role has unique bonuses and penalties that affect the story.
           </p>

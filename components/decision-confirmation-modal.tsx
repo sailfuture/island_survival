@@ -8,18 +8,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { MarkdownContent } from "./markdown-content"
 
 interface NextChoice {
-  id: number
+  id?: number
   decision_id: string
   decision_title: string
   decision_description: string
-  story: string
+  decision_choice?: string
+  story?: string
   condition: number
   morale: number
   resources: number
-  decision_number: number
-  choice: string
+  decision_number?: number
+  sequence?: number
+  choice?: string
 }
 
 interface DecisionConfirmationModalProps {
@@ -53,9 +56,9 @@ export function DecisionConfirmationModal({
           <AlertDialogDescription>
             Are you sure you want to make this decision? This action cannot be undone.
           </AlertDialogDescription>
-          {choice.decision_description && (
+          {(choice.decision_description || choice.decision_choice) && (
             <div className="text-sm text-muted-foreground mt-4 p-4 bg-muted/50 rounded">
-              {choice.decision_description}
+              <MarkdownContent content={choice.decision_description || choice.decision_choice || ''} />
             </div>
           )}
         </AlertDialogHeader>
