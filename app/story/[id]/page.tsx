@@ -4,14 +4,13 @@ import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
-import { ChevronRight, BookOpen, Star } from "lucide-react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ChevronRight, BookOpen } from "lucide-react"
 import { toast } from "sonner"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import { MarkdownContent } from "@/components/markdown-content"
+import { Item, ItemGroup, ItemContent, ItemTitle, ItemDescription, ItemActions } from "@/components/ui/item"
 
 interface UserDecision {
   id: number
@@ -51,18 +50,6 @@ interface Story {
   storyImage: string
 }
 
-interface LeaderboardEntry {
-  id: number
-  rank: number
-  email: string
-  crew_name?: string
-  decision_title: string
-  morale_after: number
-  resources_after: number
-  shipcondition_after: number
-  total_score: number
-}
-
 interface UserSettings {
   id?: number
   email: string
@@ -86,7 +73,6 @@ export default function StoryPage() {
 
   const [story, setStory] = useState<Story | null>(null)
   const [userMadeDecisions, setUserMadeDecisions] = useState<UserDecision[]>([])
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [userSettings, setUserSettings] = useState<UserSettings>({
     email: effectiveEmail || "",
     vessel_name: "",
@@ -96,12 +82,6 @@ export default function StoryPage() {
     stories_id: storyId
   })
   const [loading, setLoading] = useState(true)
-  const [currentPlayerStatus, setCurrentPlayerStatus] = useState({
-    condition: 0,
-    morale: 0,
-    resources: 0
-  })
-  const [hasLoadedStatus, setHasLoadedStatus] = useState(false)
   const [activeDecisionId, setActiveDecisionId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -116,8 +96,6 @@ export default function StoryPage() {
       
       // Reset all state to prevent showing stale data from previous story
       setUserMadeDecisions([])
-      setCurrentPlayerStatus({ condition: 0, morale: 0, resources: 0 })
-      setHasLoadedStatus(false)
       setActiveDecisionId(null)
       setUserSettings({
         email: effectiveEmail || "",
@@ -127,54 +105,64 @@ export default function StoryPage() {
         crew_captain_name: "",
         stories_id: storyId
       })
-      setLeaderboard([])
-      
-      console.log('Fetching data for story:', storyId, 'user:', effectiveEmail)
 
       // Fetch story details
       const storyResponse = await fetch(`${XANO_BASE_URL}/stories/${storyId}`)
       if (storyResponse.ok) {
         const storyData = await storyResponse.json()
         setStory(storyData)
-        console.log('Story loaded:', storyData)
       }
 
       if (effectiveEmail) {
         // Create new story instance for user if needed
         await fetch(`${XANO_BASE_URL}/create_new_story?user_email=${encodeURIComponent(effectiveEmail)}&stories_id=${storyId}`)
 
-        // Fetch user's decisions for this story
-        let scoresData: any = null
-        const scoresUrl = `${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(effectiveEmail)}&stories_id=${storyId}`
-        console.log('Fetching user scores from:', scoresUrl)
-        const scoresResponse = await fetch(scoresUrl)
-        if (scoresResponse.ok) {
-          scoresData = await scoresResponse.json()
-          console.log('User scores response for', effectiveEmail, 'story', storyId, ':', scoresData)
+        // Fetch ALL user's score records (complete decision history)
+        const userAllScoresUrl = `${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(effectiveEmail)}&stories_id=${storyId}`
+        const userAllScoresResponse = await fetch(userAllScoresUrl)
+        if (userAllScoresResponse.ok) {
+          const userAllScoresData = await userAllScoresResponse.json()
           
-          if (scoresData && scoresData.score_records && Array.isArray(scoresData.score_records)) {
-            // Filter score_records to only show records for current user and story
-            const filteredScores = scoresData.score_records.filter((record: any) => 
-              record.email === effectiveEmail && record.stories_id === storyId
-            )
-            console.log('Filtered score records for current user:', filteredScores)
-            setUserMadeDecisions(filteredScores)
-            
-            // Set current player status from latest incomplete decision (use filtered scores)
-            const incompleteDecisions = filteredScores.filter((d: UserDecision) => !d.complete)
-            if (incompleteDecisions.length > 0) {
-              const latestDecision = incompleteDecisions.sort((a: UserDecision, b: UserDecision) => b.created_at - a.created_at)[0]
-              setCurrentPlayerStatus({
-                condition: latestDecision.shipcondition_after,
-                morale: latestDecision.morale_after,
-                resources: latestDecision.resources_after
+          if (userAllScoresData && userAllScoresData.score_records && Array.isArray(userAllScoresData.score_records)) {
+            // Enrich score_records with decision_title by fetching each story
+            const enrichedRecords = await Promise.all(
+              userAllScoresData.score_records.map(async (record: any) => {
+                try {
+                  // Fetch story details for this decision
+                  const storyUrl = `${XANO_BASE_URL}/stories_individual?story_id_name=${encodeURIComponent(record.decision_id)}&stories_id=${storyId}&user_email=${encodeURIComponent(effectiveEmail)}`
+                  const storyResponse = await fetch(storyUrl)
+                  
+                  if (storyResponse.ok) {
+                    const storyData = await storyResponse.json()
+                    
+                    // Extract decision_title from result1
+                    if (storyData.result1 && Array.isArray(storyData.result1) && storyData.result1.length > 0) {
+                      const storyInfo = storyData.result1[0]
+                      return {
+                        ...record,
+                        story_details: {
+                          id: storyInfo.id,
+                          decision_id: storyInfo.decision_id,
+                          decision_title: storyInfo.decision_title,
+                          story_summary: storyInfo.story_summary || ''
+                        }
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.error(`Error fetching story for ${record.decision_id}:`, error)
+                }
+                
+                // Return record without enrichment if fetch failed
+                return record
               })
-            }
-            setHasLoadedStatus(true)
+            )
             
-            // Get active decision_id from score_records (use filtered scores)
-            if (filteredScores.length > 0) {
-              const latestRecord = filteredScores[filteredScores.length - 1]
+            setUserMadeDecisions(enrichedRecords)
+            
+            // Get active decision_id from score_records
+            if (userAllScoresData.score_records.length > 0) {
+              const latestRecord = userAllScoresData.score_records[userAllScoresData.score_records.length - 1]
               setActiveDecisionId(latestRecord.decision_id)
             }
           }
@@ -183,41 +171,20 @@ export default function StoryPage() {
         // Fetch user settings from island_survival_settings endpoint
         try {
           const settingsUrl = `${XANO_BASE_URL}/island_survival_settings?stories_id=${storyId}&user_email=${encodeURIComponent(effectiveEmail)}`
-          console.log('Fetching settings from:', settingsUrl)
           const settingsResponse = await fetch(settingsUrl)
           if (settingsResponse.ok) {
             const settingsData = await settingsResponse.json()
-            console.log('Settings response for', effectiveEmail, 'story', storyId, ':', settingsData)
-            
-            // Log what we're filtering
-            if (Array.isArray(settingsData) && settingsData.length > 0) {
-              console.log('Checking filter criteria: Looking for email=', effectiveEmail, 'stories_id=', storyId, '(type:', typeof storyId, ')')
-              console.log('Settings details:', settingsData.map((s: any) => ({
-                id: s.id,
-                email: s.email,
-                stories_id: s.stories_id,
-                stories_id_type: typeof s.stories_id,
-                email_match: s.email === effectiveEmail,
-                stories_match: s.stories_id === storyId,
-                stories_match_loose: s.stories_id == storyId, // Try loose equality
-                both_match: s.email === effectiveEmail && s.stories_id === storyId
-              })))
-            }
             
             // Handle both array and single object responses
-            // IMPORTANT: Filter by email client-side as extra safety measure
+            // Filter by email and stories_id as safety measure
             const userSettingsArray = Array.isArray(settingsData) 
               ? settingsData.filter((s: any) => s.email === effectiveEmail && s.stories_id === storyId)
               : (settingsData.id && settingsData.email === effectiveEmail && settingsData.stories_id === storyId) ? [settingsData] : []
-            
-            console.log('Filtered settings for current user (email:', effectiveEmail, 'storyId:', storyId, '):', userSettingsArray)
 
             if (userSettingsArray.length > 0) {
               const latestSettings = userSettingsArray.reduce((latest: any, current: any) => {
                 return (current.created_at || 0) > (latest.created_at || 0) ? current : latest
               })
-              
-              console.log('Using latest settings:', latestSettings)
               setUserSettings({
                 id: latestSettings.id,
                 email: latestSettings.email || effectiveEmail || "",
@@ -228,46 +195,11 @@ export default function StoryPage() {
                 stories_id: latestSettings.stories_id || storyId
               })
             }
-          } else {
-            console.warn('Settings endpoint returned error:', settingsResponse.status)
           }
         } catch (settingsError) {
-          console.warn('Error fetching settings:', settingsError)
           // Continue without settings - page should still load
         }
 
-        // Fetch leaderboard for this story
-        try {
-          const leaderboardResponse = await fetch(`${XANO_BASE_URL}/leaderboard_values?stories_id=${storyId}`)
-          if (leaderboardResponse.ok) {
-            const leaderboardData = await leaderboardResponse.json()
-            console.log('Leaderboard response:', leaderboardData)
-            
-            if (leaderboardData && leaderboardData.leaderboard_standings) {
-              // Process leaderboard data (structure may vary)
-              const processedLeaderboard = Array.isArray(leaderboardData.leaderboard_standings) 
-                ? leaderboardData.leaderboard_standings.map((entry: any, index: number) => ({
-                    id: entry.id || index,
-                    rank: index + 1,
-                    email: entry.email,
-                    crew_name: entry.crew_name || '',
-                    decision_title: entry.decision_title || 'Unknown Decision',
-                    morale_after: entry.morale_after || 0,
-                    resources_after: entry.resources_after || 0,
-                    shipcondition_after: entry.shipcondition_after || 0,
-                    total_score: Math.round(((entry.morale_after || 0) * 100 + (entry.shipcondition_after || 0) * 100 + (entry.resources_after || 0) * 1.5) / 3)
-                  }))
-                : []
-              setLeaderboard(processedLeaderboard)
-            }
-          } else {
-            console.warn('Leaderboard endpoint returned error:', leaderboardResponse.status)
-            // Leaderboard is optional - don't fail the page load
-          }
-        } catch (leaderboardError) {
-          console.warn('Error fetching leaderboard (optional feature):', leaderboardError)
-          // Leaderboard is optional - continue without it
-        }
       }
     } catch (error) {
       console.error('Error fetching story data:', error)
@@ -319,22 +251,52 @@ export default function StoryPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-6 py-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-8">
-          {story.schoolYear && (
-            <Badge variant="secondary" className="text-xs mb-3">
-              {story.schoolYear} - {story.schoolTerm}
-            </Badge>
-          )}
-          <h1 className="text-3xl font-bold tracking-tight mb-3">
-            {story.story_name}
-          </h1>
+      {/* Hero Image Header */}
+      {story.storyImage && (
+        <div className="relative w-full h-64 md:h-96 mb-8">
+          <img 
+            src={story.storyImage} 
+            alt={story.story_name}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           
-          <div className="text-sm text-muted-foreground max-w-3xl">
-            <MarkdownContent content={story.story_description} />
+          <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
+            <div className="container mx-auto max-w-7xl">
+              {story.schoolYear && (
+                <Badge variant="secondary" className="text-xs mb-3 bg-white/20 text-white border-white/30">
+                  {story.schoolYear} - {story.schoolTerm}
+                </Badge>
+              )}
+              <h1 className="text-4xl md:text-5xl font-bold mb-3">
+                {story.story_name}
+              </h1>
+              <div className="text-lg opacity-90 max-w-3xl">
+                <MarkdownContent content={story.story_description} className="prose-invert" />
+              </div>
+            </div>
           </div>
         </div>
+      )}
+      
+      <div className="container mx-auto px-6 py-8 max-w-7xl">
+        {/* Header - shown when no hero image */}
+        {!story.storyImage && (
+          <div className="mb-8">
+            {story.schoolYear && (
+              <Badge variant="secondary" className="text-xs mb-3">
+                {story.schoolYear} - {story.schoolTerm}
+              </Badge>
+            )}
+            <h1 className="text-3xl font-bold tracking-tight mb-3">
+              {story.story_name}
+            </h1>
+            
+            <div className="text-sm text-muted-foreground max-w-3xl">
+              <MarkdownContent content={story.story_description} />
+            </div>
+          </div>
+        )}
 
         {/* Crew Information */}
         <div className="mb-8">
@@ -379,7 +341,7 @@ export default function StoryPage() {
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Decision History</h2>
           {userMadeDecisions.length === 0 ? (
-            <Card className="border-0 shadow-sm">
+            <Card className="border shadow-sm">
               <CardContent className="text-center py-12">
                 <BookOpen className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-base font-semibold mb-1">No decisions yet</h3>
@@ -387,152 +349,48 @@ export default function StoryPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-3">
+            <ItemGroup>
               {userMadeDecisions
                 .sort((a, b) => (a.story_sequence?.decision_number ?? a.decision_number ?? 0) - (b.story_sequence?.decision_number ?? b.decision_number ?? 0))
                 .map((decision, index) => (
-                  <Card 
+                  <Item
                     key={decision.id}
-                    className={`cursor-pointer transition-all hover:shadow-md border-0 shadow-sm ${
-                      decision.complete ? 'bg-green-50/50 dark:bg-green-950/20' : ''
+                    className={`cursor-pointer ${
+                      decision.complete ? 'bg-green-50/50 dark:bg-green-950/10 border-l-4 border-l-green-500' : ''
                     }`}
                     onClick={() => handleDecisionClick(decision)}
                   >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-2 flex-1">
-                          <div className="flex items-center space-x-2">
-                            <Badge variant={decision.complete ? "default" : "secondary"} className="text-xs">
-                              Decision {decision.story_sequence?.decision_number ?? decision.decision_number ?? index + 1}
-                            </Badge>
-                            <h3 className="text-sm font-semibold">
-                              {decision.story_details?.decision_title || decision.decision_id}
-                            </h3>
-                          </div>
-                          {decision.story_details?.story_summary && (
-                            <div className="text-xs text-muted-foreground">
-                              <MarkdownContent content={decision.story_details.story_summary} />
-                            </div>
-                          )}
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0 ml-3" />
-                      </div>
-                    </CardContent>
-                  </Card>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <Badge 
+                        variant={decision.complete ? "default" : "secondary"} 
+                        className={`text-xs font-semibold ${decision.complete ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                      >
+                        {decision.story_sequence?.decision_number ?? decision.decision_number ?? index + 1}
+                      </Badge>
+                    </div>
+                    
+                    <ItemContent>
+                      <ItemTitle>
+                        {decision.story_details?.decision_title || decision.decision_id}
+                      </ItemTitle>
+                      {decision.story_details?.story_summary && (
+                        <ItemDescription className="line-clamp-2">
+                          {decision.story_details.story_summary}
+                        </ItemDescription>
+                      )}
+                    </ItemContent>
+                    
+                    <ItemActions>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </ItemActions>
+                  </Item>
                 ))}
-            </div>
+            </ItemGroup>
           )}
         </div>
 
-        {/* Current Status Cards */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Current Status</h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="border-0 shadow-sm">
-              <CardContent className="pt-5 pb-6">
-                {!hasLoadedStatus || currentPlayerStatus.condition === 0 ? (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <p className="text-sm">{!hasLoadedStatus ? "Loading..." : "No data"}</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-xs text-muted-foreground mb-2">Health</div>
-                    <div className="text-2xl font-bold mb-3">
-                      {Math.round(currentPlayerStatus.condition * 100)}%
-                    </div>
-                    <Progress value={currentPlayerStatus.condition * 100} className="h-1.5 mb-2" />
-                    <p className="text-xs text-muted-foreground">Physical condition of the crew</p>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm">
-              <CardContent className="pt-5 pb-6">
-                {!hasLoadedStatus || currentPlayerStatus.morale === 0 ? (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <p className="text-sm">{!hasLoadedStatus ? "Loading..." : "No data"}</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-xs text-muted-foreground mb-2">Morale</div>
-                    <div className="text-2xl font-bold mb-3">
-                      {Math.round(currentPlayerStatus.morale * 100)}%
-                    </div>
-                    <Progress value={currentPlayerStatus.morale * 100} className="h-1.5 mb-2" />
-                    <p className="text-xs text-muted-foreground">Team spirit and motivation</p>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm">
-              <CardContent className="pt-5 pb-6">
-                {!hasLoadedStatus || currentPlayerStatus.resources === 0 ? (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <p className="text-sm">{!hasLoadedStatus ? "Loading..." : "No data"}</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-xs text-muted-foreground mb-2">Resources</div>
-                    <div className="text-2xl font-bold mb-3">
-                      {Math.round(currentPlayerStatus.resources)}
-                    </div>
-                    <Progress value={Math.min(currentPlayerStatus.resources, 150)} max={150} className="h-1.5 mb-2" />
-                    <p className="text-xs text-muted-foreground">Food, water, and supplies</p>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Survival Leaderboard */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Survival Leaderboard</h2>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-0">
-              {leaderboard.length === 0 ? (
-                <div className="text-center py-12">
-                  <Star className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-base font-semibold mb-1">No leaderboard data</h3>
-                  <p className="text-sm text-muted-foreground">Complete some decisions to see rankings!</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px] text-xs">Rank</TableHead>
-                      <TableHead className="text-xs">Crew Name</TableHead>
-                      <TableHead className="text-xs">Last Decision</TableHead>
-                      <TableHead className="text-right text-xs">Health</TableHead>
-                      <TableHead className="text-right text-xs">Morale</TableHead>
-                      <TableHead className="text-right text-xs">Resources</TableHead>
-                      <TableHead className="text-right text-xs">Score</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leaderboard.slice(0, 10).map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell className="text-sm font-medium">#{entry.rank}</TableCell>
-                        <TableCell className="text-sm">{entry.crew_name || entry.email}</TableCell>
-                        <TableCell className="text-sm">{entry.decision_title}</TableCell>
-                        <TableCell className="text-right text-sm">
-                          {Math.round(entry.shipcondition_after * 100)}%
-                        </TableCell>
-                        <TableCell className="text-right text-sm">
-                          {Math.round(entry.morale_after * 100)}%
-                        </TableCell>
-                        <TableCell className="text-right text-sm">
-                          {Math.round(entry.resources_after)}
-                        </TableCell>
-                        <TableCell className="text-right text-sm font-semibold">{entry.total_score}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </div>
       </div>
     </div>
   )

@@ -28,9 +28,7 @@ export default function HomePage() {
   useEffect(() => {
     async function loadStories() {
       try {
-        console.log('Fetching available stories...')
         const storiesData = await fetchAllStories()
-        console.log('Stories loaded:', storiesData)
         setStories(storiesData)
       } catch (error) {
         console.error('Error fetching stories:', error)
@@ -44,7 +42,6 @@ export default function HomePage() {
   }, [])
 
   const handleStoryClick = (storyId: number) => {
-    console.log('Navigating to story:', storyId)
     router.push(`/story/${storyId}`)
   }
 
@@ -78,14 +75,14 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-6 py-8 max-w-7xl">
+      <div className="container mx-auto px-6 py-12 max-w-7xl">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight mb-2">
+        <div className="mb-12 text-center">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
             Survival Stories
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Choose your adventure and test your survival skills
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Choose your adventure and test your survival skills through immersive decision-based stories
           </p>
         </div>
 
@@ -99,64 +96,93 @@ export default function HomePage() {
             </p>
               </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {stories.map((story) => (
               <Card 
                 key={story.id} 
-                className="cursor-pointer transition-all hover:shadow-md border-0 shadow-sm group"
+                className="cursor-pointer transition-all hover:shadow-xl border-0 shadow-md group overflow-hidden"
                 onClick={() => handleStoryClick(story.id)}
               >
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg group-hover:text-primary transition-colors">
-                      {story.story_name}
-              </CardTitle>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-              </div>
-                  <div className="flex gap-2">
-                    {story.schoolYear && (
-                      <Badge variant="secondary" className="text-xs">
-                        <GraduationCap className="h-3 w-3 mr-1" />
-                        {story.schoolYear}
-                      </Badge>
-                    )}
-                    {story.schoolTerm && (
-                      <Badge variant="outline" className="text-xs">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        {story.schoolTerm}
-                      </Badge>
-                    )}
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-                  <CardDescription className="text-xs mb-4 line-clamp-2">
-                    {story.story_description}
-                  </CardDescription>
-                  
-                  {/* Story Image */}
-                  {story.storyImage && (
-                    <div className="aspect-video bg-muted rounded-lg overflow-hidden">
-                      <img 
-                        src={story.storyImage} 
-                        alt={story.story_name}
-                        className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-110"
-                        onError={(e) => {
-                          // Fallback to placeholder if image fails to load
-                          e.currentTarget.src = "/placeholder.svg"
-                        }}
-                      />
+                {/* Story Image Hero */}
+                {story.storyImage ? (
+                  <div className="relative aspect-[16/10] overflow-hidden">
+                    <img 
+                      src={story.storyImage} 
+                      alt={story.story_name}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      onError={(e) => {
+                        e.currentTarget.src = "/placeholder.svg"
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+                    
+                    {/* Title Overlay on Image */}
+                    <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+                      <div className="flex gap-2 mb-2">
+                        {story.schoolYear && (
+                          <Badge variant="secondary" className="text-xs bg-white/20 text-white border-white/30 backdrop-blur-sm">
+                            {story.schoolYear}
+                          </Badge>
+                        )}
+                        {story.schoolTerm && (
+                          <Badge variant="outline" className="text-xs bg-black/20 text-white border-white/30 backdrop-blur-sm">
+                            {story.schoolTerm}
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="text-2xl font-bold mb-1 group-hover:text-white transition-colors">
+                        {story.story_name}
+                      </h3>
                     </div>
-                  )}
-                  
-                  {!story.storyImage && (
-                    <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
-                      <BookOpen className="h-10 w-10 text-muted-foreground" />
-                            </div>
-                  )}
-          </CardContent>
-        </Card>
+                    
+                    {/* Chevron Icon */}
+                    <div className="absolute top-4 right-4">
+                      <div className="bg-white/20 backdrop-blur-sm rounded-full p-2 group-hover:bg-white/30 transition-colors">
+                        <ChevronRight className="h-5 w-5 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative aspect-[16/10] bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                    <BookOpen className="h-16 w-16 text-white/50" />
+                    <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+                      <div className="flex gap-2 mb-2">
+                        {story.schoolYear && (
+                          <Badge variant="secondary" className="text-xs bg-white/20 text-white border-white/30">
+                            {story.schoolYear}
+                          </Badge>
+                        )}
+                        {story.schoolTerm && (
+                          <Badge variant="outline" className="text-xs bg-black/20 text-white border-white/30">
+                            {story.schoolTerm}
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="text-2xl font-bold mb-1">
+                        {story.story_name}
+                      </h3>
+                    </div>
+                    <div className="absolute top-4 right-4">
+                      <div className="bg-white/20 rounded-full p-2 group-hover:bg-white/30 transition-colors">
+                        <ChevronRight className="h-5 w-5 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Description */}
+                <CardContent className="p-6">
+                  <p className="text-sm text-muted-foreground line-clamp-3">
+                    {story.story_description}
+                  </p>
+                  <div className="mt-4 flex items-center text-sm font-medium text-primary group-hover:gap-2 transition-all">
+                    <span>Begin Adventure</span>
+                    <ChevronRight className="h-4 w-4 opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-0 transition-all" />
+                  </div>
+                </CardContent>
+              </Card>
             ))}
-              </div>
+          </div>
         )}
 
         {/* User Info */}

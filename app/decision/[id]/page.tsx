@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
@@ -120,18 +119,8 @@ export default function DecisionPage() {
   const [isLoadingNext, setIsLoadingNext] = useState(false)
   const [selectedNextDecision, setSelectedNextDecision] = useState<string | null>(null)
   const [confirmedChoiceId, setConfirmedChoiceId] = useState<string | null>(null)
-  const [impactData, setImpactData] = useState<{
-    oldStats: { morale: number; resources: number; condition: number }
-    newStats: { morale: number; resources: number; condition: number }
-    choice: any
-  } | null>(null)
   const [showResetDialog, setShowResetDialog] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
-  const [finalStats, setFinalStats] = useState<{
-    morale: number
-    resources: number
-    condition: number
-  } | null>(null)
   const [decisionData, setDecisionData] = useState<DecisionDetail | null>(null)
   const [playerStatus, setPlayerStatus] = useState<PlayerStatus>({
     morale: 0,
@@ -152,16 +141,6 @@ export default function DecisionPage() {
   const urlEmail = searchParams.get('user_email') // Add user_email to URL when navigating from home page
   const userEmail = sessionEmail || urlEmail
   const effectiveEmail = isPublicView ? 'guest' : (userEmail || 'guest')
-  
-  console.log('Decision page session status:', sessionStatus, 'Session email:', sessionEmail, 'URL email:', urlEmail, 'Effective email:', effectiveEmail)
-
-  const getStatusColor = (value: number) => {
-    // Convert decimal to percentage if needed (Xano API uses 0.0-1.0 format)
-    const percentage = value <= 1 ? value * 100 : value
-    if (percentage >= 70) return "text-green-600"
-    if (percentage >= 40) return "text-yellow-600"
-    return "text-red-600"
-  }
 
   // Check if this is the final ending (decision_number = 6) - moved here to be available earlier
   const isFinalEnding = decisionData?.decision_number === 6 || 
@@ -173,7 +152,6 @@ export default function DecisionPage() {
       setLoading(true)
       try {
         const decisionId = params.id as string
-        console.log('Loading story with decision_id:', decisionId)
         
         // Validate decision_id
         if (!decisionId || decisionId === 'undefined' || decisionId === 'null') {
@@ -184,31 +162,39 @@ export default function DecisionPage() {
           return
         }
         
-        console.log('View type:', isHistoricalView ? 'HISTORICAL (viewing past decision)' : 'CURRENT (active story)')
-        
         let storyData = null
         
-        // Use previous_story endpoint for authenticated users (works for both current and historical)
-        if (!isPublicView && effectiveEmail && effectiveEmail !== 'guest') {
-          console.log('Fetching from previous_story endpoint for user:', effectiveEmail)
+        // Use previous_story endpoint ONLY for current (non-historical) views
+        // For historical views, go directly to stories_individual to get the correct decision
+        if (!isPublicView && effectiveEmail && effectiveEmail !== 'guest' && !isHistoricalView) {
           const previousStoryUrl = `${XANO_BASE_URL}/previous_story?user_email=${encodeURIComponent(effectiveEmail)}&stories_id=${storiesId}&decision_id=${encodeURIComponent(decisionId)}`
-          console.log('Previous story URL:', previousStoryUrl)
           
           try {
             const previousResponse = await fetch(previousStoryUrl)
             if (previousResponse.ok) {
               storyData = await previousResponse.json()
-              console.log('Previous story data from API:', storyData)
+              
+              // Check if the API returned the correct story
+              if (storyData && storyData.current_story) {
+                const returnedDecisionId = storyData.current_story.decision_id
+                if (returnedDecisionId !== decisionId) {
+                  storyData = null
+                }
+              } else if (storyData && storyData.decision_id) {
+                const returnedDecisionId = storyData.decision_id
+                if (returnedDecisionId !== decisionId) {
+                  storyData = null
+                }
+              }
             }
           } catch (error) {
             console.error('Error fetching previous_story:', error)
           }
         }
         
-        // Fallback to stories_individual if active_story didn't work
+        // Fallback to stories_individual if previous_story didn't work
         if (!storyData) {
-          const url = `${XANO_BASE_URL}/stories_individual?decision_id=${encodeURIComponent(decisionId)}&stories_id=${storiesId}`
-          console.log('Fetching from stories_individual URL:', url)
+          const url = `${XANO_BASE_URL}/stories_individual?story_id_name=${encodeURIComponent(decisionId)}&stories_id=${storiesId}&user_email=${encodeURIComponent(effectiveEmail)}`
           
           const response = await fetch(url, {
             method: 'GET',
@@ -217,31 +203,73 @@ export default function DecisionPage() {
             }
           })
           
-          console.log('Response status:', response.status)
-          console.log('Response ok:', response.ok)
-          
           if (response.ok) {
             storyData = await response.json()
-            console.log('Story data from API:', storyData)
-            console.log('Story data type:', Array.isArray(storyData) ? 'Array' : 'Object')
           }
         }
         
         if (storyData) {
-          console.log('Story data structure check:', {
-            has_current_story: !!storyData.current_story,
-            has_next_story: !!storyData.next_story,
-            is_array: Array.isArray(storyData),
-            next_stories_type: typeof storyData.next_stories,
-            next_stories_value: storyData.next_stories
-          })
           
           // Handle different response structures
           
-          // Check if this is a direct story response (from island_survival_stories/{id})
-          if (storyData.decision_id && !storyData.current_story) {
-            console.log('Using direct story endpoint response:', storyData)
+          // Check if this is the new structure with result1 and next_stories
+          if (storyData.result1 && Array.isArray(storyData.result1) && storyData.result1.length > 0) {
+            const currentStory = storyData.result1[0]
+            let nextStories = storyData.next_stories || []
             
+            // Flatten nested arrays - API returns [[{story1}], [{story2}]] format
+            if (Array.isArray(nextStories) && nextStories.length > 0) {
+              // Check if first element is an array (nested structure)
+              if (Array.isArray(nextStories[0])) {
+                // Flatten and extract first element from each nested array
+                nextStories = nextStories.map((nested: any) => {
+                  if (Array.isArray(nested) && nested.length > 0) {
+                    return nested[0]
+                  }
+                  return nested
+                }).filter((item: any) => item !== null && item !== undefined)
+              }
+              
+              // Filter by stories_id to ensure we only show choices from the same story
+              nextStories = nextStories.filter((ns: any) => ns.stories_id === storiesId)
+            }
+            
+            const mappedDecision: DecisionDetail = {
+              id: currentStory.id || 0,
+              decision_id: currentStory.decision_id || decisionId,
+              decision_title: currentStory.decision_title || 'Decision',
+              decision_description: currentStory.decision_description || '',
+              story: currentStory.story || '',
+              condition: currentStory.condition || 0,
+              morale: currentStory.morale || 0,
+              resources: currentStory.resources || 0,
+              choice: currentStory.decision_choice || '',
+              decision_number: currentStory.sequence || currentStory.decision_number || 0,
+              created_at: currentStory.created_at || Date.now(),
+              condition_description: currentStory.condition_description || '',
+              morale_description: currentStory.morale_description || '',
+              resources_description: currentStory.resources_description || '',
+              reflective_prompt_1: currentStory.reflective_prompt_1 || '',
+              reflective_prompt_2: currentStory.reflective_prompt_2 || '',
+              reflective_prompt_3: currentStory.reflective_prompt_3 || '',
+              reflective_prompt_4: currentStory.reflective_prompt_4 || '',
+              hero_image: currentStory.hero_image || '',
+              next: nextStories
+            }
+            
+            setDecisionData(mappedDecision)
+            
+            // Set player status from URL params if this is a historical view
+            if (isHistoricalView) {
+              setPlayerStatus({
+                morale: urlMorale ? parseFloat(urlMorale) : 0,
+                resources: urlResources ? parseInt(urlResources) : 0,
+                condition: urlCondition ? parseFloat(urlCondition) : 0
+              })
+            }
+          }
+          // Check if this is a direct story response (from island_survival_stories/{id})
+          else if (storyData.decision_id && !storyData.current_story) {
             // Extract next_stories from the story data (should be included in response)
             let nextChoices: any[] = []
             
@@ -249,11 +277,9 @@ export default function DecisionPage() {
               nextChoices = Array.isArray(storyData._story_sequence_2.next_stories) 
                 ? storyData._story_sequence_2.next_stories 
                 : []
-              console.log('Found next_stories in _story_sequence_2:', nextChoices)
               
               // Flatten if nested
               if (nextChoices.length > 0 && Array.isArray(nextChoices[0])) {
-                console.log('Flattening nested next_stories from historical story')
                 nextChoices = nextChoices.flat()
               }
             }
@@ -281,7 +307,6 @@ export default function DecisionPage() {
               next: nextChoices
             }
             
-            console.log('Setting decision data from direct story endpoint with next choices:', mappedDecision)
             setDecisionData(mappedDecision)
             
             // Set player status from URL params (historical view)
@@ -291,7 +316,6 @@ export default function DecisionPage() {
                 resources: urlResources ? parseInt(urlResources) : 0,
                 condition: urlCondition ? parseFloat(urlCondition) : 0
               })
-              console.log('Set historical player status from URL:', { urlMorale, urlResources, urlCondition })
             }
           } else if (storyData.current_story && (storyData.next_story || storyData.next_stories)) {
             // This is the active_story endpoint response
@@ -301,7 +325,6 @@ export default function DecisionPage() {
             const currentStory = Array.isArray(storyData.current_story) 
               ? storyData.current_story[0] 
               : storyData.current_story
-            console.log('Using current_story:', currentStory)
             
             // Handle both next_story and next_stories naming
             // next_stories might be nested arrays [[{...}], [{...}]] - flatten if needed
@@ -313,7 +336,6 @@ export default function DecisionPage() {
             
             // If next_stories is an array of arrays, flatten it
             if (nextChoices.length > 0 && Array.isArray(nextChoices[0])) {
-              console.log('Flattening nested next_stories arrays')
               nextChoices = nextChoices.flat()
             }
             
@@ -327,8 +349,6 @@ export default function DecisionPage() {
               const choiceDecisionNum = choice.decision_number || parseInt(choice.decision_id.match(/\d+/)?.[0] || '0')
               return choiceDecisionNum === currentDecisionNum + 1
             })
-            
-            console.log('Filtered next choices for decision', currentStory.decision_id, ':', filteredNextChoices)
             
             const mappedDecision: DecisionDetail = {
               id: currentStory.id || 0,
@@ -353,8 +373,6 @@ export default function DecisionPage() {
               next: filteredNextChoices
             }
             
-            console.log('Setting decision data from active_story current_story:', mappedDecision)
-            console.log('Next choices from next_story/next_stories:', mappedDecision.next?.length || 0, mappedDecision.next)
             setDecisionData(mappedDecision)
             
             // Set player status from score_records if available
@@ -366,20 +384,22 @@ export default function DecisionPage() {
                 condition: latestScore.shipcondition_after || 0
               })
               setDecisionCreatedAt(latestScore.created_at)
-              console.log('Set player status from score_records:', {
-                morale: latestScore.morale_after,
-                resources: latestScore.resources_after,
-                condition: latestScore.shipcondition_after,
-                created_at: latestScore.created_at
-              })
             }
           } else if (Array.isArray(storyData)) {
             // stories_individual returned an array - filter to find the matching decision_id
-            console.log('Story data is an array with', storyData.length, 'items, filtering for decision_id:', decisionId)
             const matchingStory = storyData.find((s: any) => s.decision_id === decisionId && s.stories_id === storiesId)
             
             if (matchingStory) {
-              console.log('Found matching story in array:', matchingStory)
+              
+              // Extract next stories if available
+              let nextChoices: any[] = []
+              if (matchingStory.next_stories && Array.isArray(matchingStory.next_stories)) {
+                nextChoices = matchingStory.next_stories
+                // Flatten if nested
+                if (nextChoices.length > 0 && Array.isArray(nextChoices[0])) {
+                  nextChoices = nextChoices.flat()
+                }
+              }
               
               const mappedDecision: DecisionDetail = {
                 id: matchingStory.id || 0,
@@ -401,92 +421,10 @@ export default function DecisionPage() {
                 reflective_prompt_3: matchingStory.reflective_prompt_3 || '',
                 reflective_prompt_4: matchingStory.reflective_prompt_4 || '',
                 hero_image: matchingStory.hero_image || '',
-                next: [] // Will be populated from active_story if available
+                next: nextChoices
               }
               
-              console.log('Setting decision data from array match:', mappedDecision)
               setDecisionData(mappedDecision)
-              
-              // Get next_story options - only use active_story for NON-historical views
-              if (effectiveEmail && effectiveEmail !== 'guest' && !isHistoricalView) {
-                try {
-                  const activeStoryUrl = `${XANO_BASE_URL}/active_story?user_email=${encodeURIComponent(effectiveEmail)}&stories_id=${storiesId}`
-                  const activeStoryResponse = await fetch(activeStoryUrl)
-                  if (activeStoryResponse.ok) {
-                  const activeStoryData = await activeStoryResponse.json()
-                  console.log('Got active_story for next choices (current view):', activeStoryData)
-                  
-                  // Handle both next_story and next_stories naming
-                  let nextChoices = Array.isArray(activeStoryData.next_story) 
-                    ? activeStoryData.next_story 
-                    : Array.isArray(activeStoryData.next_stories) 
-                      ? activeStoryData.next_stories 
-                      : []
-                  
-                  // If next_stories is an array of arrays, flatten it
-                  if (nextChoices.length > 0 && Array.isArray(nextChoices[0])) {
-                    console.log('Flattening nested next_stories arrays (current view):', nextChoices)
-                    nextChoices = nextChoices.flat()
-                  }
-                  
-                  if (nextChoices.length > 0) {
-                    console.log('Setting CURRENT next choices (flattened):', nextChoices)
-                    setDecisionData(prev => prev ? { ...prev, next: nextChoices } : null)
-                  }
-                  
-                  // Get created_at from score_records
-                  if (activeStoryData.score_records && activeStoryData.score_records.length > 0) {
-                    const latestScore = activeStoryData.score_records[activeStoryData.score_records.length - 1]
-                    setDecisionCreatedAt(latestScore.created_at)
-                  }
-                  }
-                } catch (error) {
-                  console.error('Error fetching active_story for next choices:', error)
-                }
-              } else if (isHistoricalView) {
-                // For historical views, need to find which stories come AFTER this decision
-                console.log('Historical view - need to find next choices for decision:', decisionId)
-                
-                // Query stories_individual to find all stories, then filter for ones that come after this decision
-                try {
-                  const allStoriesUrl = `${XANO_BASE_URL}/stories_individual?stories_id=${storiesId}`
-                  const allStoriesResponse = await fetch(allStoriesUrl)
-                  
-                  if (allStoriesResponse.ok) {
-                    const allStories = await allStoriesResponse.json()
-                    
-                    if (Array.isArray(allStories)) {
-                      // Find stories where this decision's next choices should be
-                      // Look for the current story's _story_sequence_2 field
-                      const currentHistoricalStory = allStories.find((s: any) => 
-                        s.decision_id === decisionId && s.stories_id === storiesId
-                      )
-                      
-                      console.log('Current historical story with sequence data:', currentHistoricalStory)
-                      
-                      if (currentHistoricalStory && currentHistoricalStory._story_sequence_2) {
-                        const sequenceData = currentHistoricalStory._story_sequence_2
-                        console.log('Story sequence data:', sequenceData)
-                        
-                        // Check if sequence data has next_stories
-                        if (sequenceData.next_stories && Array.isArray(sequenceData.next_stories)) {
-                          let historicalNextChoices = sequenceData.next_stories
-                          
-                          // Flatten if nested
-                          if (historicalNextChoices.length > 0 && Array.isArray(historicalNextChoices[0])) {
-                            historicalNextChoices = historicalNextChoices.flat()
-                          }
-                          
-                          console.log('Found historical next choices from sequence:', historicalNextChoices)
-                          setDecisionData(prev => prev ? { ...prev, next: historicalNextChoices } : null)
-                        }
-                      }
-                    }
-                  }
-                } catch (error) {
-                  console.error('Error fetching historical next choices:', error)
-                }
-              }
             } else {
               console.error('No matching story found in array for decision_id:', decisionId, 'stories_id:', storiesId)
               toast.error('Story not found for this decision')
@@ -494,8 +432,6 @@ export default function DecisionPage() {
             }
           } else if (storyData.id) {
             // Handle direct story object response (new structure)
-            console.log('Using direct story data mapping')
-            
             const mappedDecision: DecisionDetail = {
               id: storyData.id || 0,
               decision_id: storyData.decision_id || decisionId,
@@ -537,7 +473,6 @@ export default function DecisionPage() {
                 const activeStoryResponse = await fetch(activeStoryUrl)
                 if (activeStoryResponse.ok) {
                   const activeStoryData = await activeStoryResponse.json()
-                  console.log('Got active_story for next choices:', activeStoryData)
                   
                   // Handle both next_story and next_stories naming
                   let nextChoices = Array.isArray(activeStoryData.next_story) 
@@ -548,12 +483,10 @@ export default function DecisionPage() {
                   
                   // If next_stories is an array of arrays, flatten it
                   if (nextChoices.length > 0 && Array.isArray(nextChoices[0])) {
-                    console.log('Flattening nested next_stories arrays (from direct story path):', nextChoices)
                     nextChoices = nextChoices.flat()
                   }
                   
                   if (nextChoices.length > 0) {
-                    console.log('Setting next choices from active_story (flattened):', nextChoices)
                     setDecisionData(prev => prev ? { ...prev, next: nextChoices } : null)
                   }
                   
@@ -658,12 +591,10 @@ export default function DecisionPage() {
       try {
         // Fetch all score records for this user and story
         const scoresUrl = `${XANO_BASE_URL}/island_survival_score?user_email=${encodeURIComponent(userEmail)}&stories_id=${storiesId}`
-        console.log('Checking for completed decision, fetching scores from:', scoresUrl)
         const scoresResponse = await fetch(scoresUrl)
         
         if (scoresResponse.ok) {
           const scoresData = await scoresResponse.json()
-          console.log('All score records for user:', scoresData)
           
           if (Array.isArray(scoresData) && scoresData.length > 0) {
             // Find a record where the previous_decision matches this story's decision_id
@@ -673,38 +604,14 @@ export default function DecisionPage() {
             )
             
             if (nextDecisionRecord) {
-              console.log('Found next decision record, this decision was completed:', nextDecisionRecord)
-              console.log('Looking for choice with decision_id:', nextDecisionRecord.decision_id)
-              
               // Find which choice matches the next decision_id
               const matchingChoice = decisionData.next.find(choice => 
                 choice.decision_id === nextDecisionRecord.decision_id
               )
               
               if (matchingChoice) {
-                console.log('Found matching choice that was selected:', matchingChoice)
                 setConfirmedChoiceId(matchingChoice.decision_id)
-                
-                // For completed decisions, show the impact
-                setImpactData({
-                  oldStats: {
-                    morale: decisionData.morale,
-                    resources: decisionData.resources,
-                    condition: decisionData.condition
-                  },
-                  newStats: {
-                    morale: nextDecisionRecord.morale_after,
-                    resources: nextDecisionRecord.resources_after,
-                    condition: nextDecisionRecord.shipcondition_after
-                  },
-                  choice: matchingChoice
-                })
-              } else {
-                console.log('No matching choice found in next options for decision_id:', nextDecisionRecord.decision_id)
-                console.log('Available choices:', decisionData.next.map(c => c.decision_id))
               }
-            } else {
-              console.log('No completed decision found after this one (decision_id:', decisionData.decision_id, ')')
             }
           }
         }
@@ -716,35 +623,6 @@ export default function DecisionPage() {
     checkCompletedDecision()
   }, [decisionData, userEmail, storiesId, isPublicView])
 
-  // Fetch final stats for ending page
-  useEffect(() => {
-    const fetchFinalStats = async () => {
-      if (!isFinalEnding || !userEmail || userEmail === 'guest') return
-
-      try {
-        const userScoresResponse = await fetch(`${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(userEmail)}&stories_id=${storiesId}`)
-        if (userScoresResponse.ok) {
-          const userScoresData = await userScoresResponse.json()
-          if (userScoresData.score_records && userScoresData.score_records.length > 0) {
-            // Get the latest record (should be the final decision)
-            const latestRecord = userScoresData.score_records.sort((a: any, b: any) => b.created_at - a.created_at)[0]
-            
-            console.log('Final stats from latest record:', latestRecord)
-            
-            setFinalStats({
-              morale: latestRecord.morale_after || 0,
-              resources: latestRecord.resources_after || 0,
-              condition: latestRecord.shipcondition_after || 0
-            })
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching final stats:', error)
-      }
-    }
-
-    fetchFinalStats()
-  }, [isFinalEnding, userEmail, storiesId])
 
   const handleChoiceClick = (choice: NextChoice) => {
     setSelectedNextDecision(choice.decision_id)
@@ -773,16 +651,6 @@ export default function DecisionPage() {
         condition: Math.max(0, Math.min(1, playerStatus.condition + (selectedChoice.condition || 0)))
       }
       
-      console.log('Creating score record for choice:', selectedChoice)
-      console.log('Current player status:', playerStatus)
-      console.log('New stats after choice:', newStats)
-      console.log('Current decision data:', decisionData)
-      console.log('Session user email:', session?.user?.email)
-      
-      // POST to island_survival_score
-      console.log('User email:', effectiveEmail)
-      console.log('Session status in handleConfirmDecision:', sessionStatus, 'Session email:', session?.user?.email)
-      
       // Save the score to track user's decision
       if (effectiveEmail && effectiveEmail !== 'guest' && userEmail) {
         try {
@@ -790,14 +658,12 @@ export default function DecisionPage() {
           let storyId = selectedChoice.id
           
           if (!storyId) {
-            console.log('Choice missing id, fetching story by decision_id:', selectedChoice.decision_id)
             try {
               const storyLookupResponse = await fetch(
                 `${XANO_BASE_URL}/stories_individual?decision_id=${encodeURIComponent(selectedChoice.decision_id)}&stories_id=${storiesId}`
               )
               if (storyLookupResponse.ok) {
                 const storyLookupData = await storyLookupResponse.json()
-                console.log('Story lookup response:', storyLookupData)
                 
                 // Handle array response
                 if (Array.isArray(storyLookupData)) {
@@ -808,8 +674,6 @@ export default function DecisionPage() {
                 } else {
                   storyId = storyLookupData.id || storyLookupData.current_story?.id
                 }
-                
-                console.log('Found story ID:', storyId)
               }
             } catch (lookupError) {
               console.error('Error looking up story ID:', lookupError)
@@ -832,9 +696,6 @@ export default function DecisionPage() {
             stories_id: storiesId
           }
           
-          console.log('POST to island_survival_score with payload:', scorePayload)
-          console.log('Selected choice data:', selectedChoice)
-          
           const scoreResponse = await fetch(`${XANO_BASE_URL}/island_survival_score`, {
             method: 'POST',
             headers: {
@@ -843,16 +704,13 @@ export default function DecisionPage() {
             body: JSON.stringify(scorePayload)
           })
           
-          console.log('Score POST response status:', scoreResponse.status)
-          
           if (!scoreResponse.ok) {
             const errorText = await scoreResponse.text()
             console.error('Failed to save score:', scoreResponse.status, errorText)
             toast.error('Failed to save your decision. Please try again.')
             throw new Error('Score save failed')
           } else {
-            const scoreResult = await scoreResponse.json()
-            console.log('Score saved successfully:', scoreResult)
+            await scoreResponse.json()
             toast.success('Decision saved!')
           }
         } catch (error) {
@@ -862,31 +720,20 @@ export default function DecisionPage() {
           return
         }
       } else {
-        console.log('Skipping score save - user not logged in or guest user')
         toast.info('Decision recorded (login to save progress)')
       }
 
-      // Update player status IMMEDIATELY so impact shows
+      // Update player status
       setPlayerStatus(newStats)
       
       // Mark the choice as confirmed (turn it green)
       setConfirmedChoiceId(selectedChoice.decision_id)
       
-      // Store impact data for display using actual before/after values
-      const impact = {
-        oldStats: { ...playerStatus }, // Clone the old stats
-        newStats: { ...newStats }, // Clone the new stats
-        choice: selectedChoice
-      }
-      
-      console.log('Setting impact data:', impact)
-      setImpactData(impact)
-      
       // Close dialog
       setShowNextDecisionDialog(false)
       
       // Show notification
-      toast.success('Decision confirmed! See the impact below.')
+      toast.success('Decision confirmed!')
     } catch (error) {
       console.error('Error saving decision:', error)
       toast.error('Failed to save decision. Please try again.')
@@ -937,9 +784,7 @@ export default function DecisionPage() {
     router.push(`/story/${storiesId}`)
     
     try {
-      // Perform reset operations in the background
-      console.log('Starting background reset process...')
-      
+            // Perform reset operations in the background
       // First, get all user's score records to delete them
       const scoresResponse = await fetch(`${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(userEmail)}&stories_id=${storiesId}`)
       if (scoresResponse.ok) {
@@ -984,7 +829,6 @@ export default function DecisionPage() {
         }
       }
       
-      console.log('Reset process completed successfully')
       toast.success("Game reset successfully! Starting fresh adventure...")
       
       // Force a page reload after a short delay to ensure create_new_story runs
@@ -1285,62 +1129,6 @@ export default function DecisionPage() {
             </CardContent>
           </Card>
 
-          {/* Final Score Cards */}
-          <div className="mb-6 print:hidden">
-            <h2 className="text-2xl font-bold mb-4">Your Final Status</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Final Health (Condition) */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Final Health</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center">
-                    <div className="text-4xl font-bold mb-2">
-                      <span className={`${getStatusColor(finalStats?.condition || 0)}`}>
-                        {finalStats ? Math.round(finalStats.condition * 100) : 0}%
-                    </span>
-                  </div>
-                    <p className="text-sm text-muted-foreground">Physical condition of the crew</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Final Morale */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Final Morale</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center">
-                    <div className="text-4xl font-bold mb-2">
-                      <span className={`${getStatusColor(finalStats?.morale || 0)}`}>
-                        {finalStats ? Math.round(finalStats.morale * 100) : 0}%
-                    </span>
-                  </div>
-                    <p className="text-sm text-muted-foreground">Team spirit and motivation</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Final Resources */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Final Resources</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center">
-                    <div className="text-4xl font-bold mb-2">
-                      <span className={`${getStatusColor(finalStats?.resources || 0)}`}>
-                        {finalStats?.resources || 0}
-                    </span>
-                  </div>
-                    <p className="text-sm text-muted-foreground">Food, water, and supplies</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
 
           {/* Reset Button */}
           <Card className="mb-6 print:hidden border-2 border-primary">
@@ -1399,7 +1187,13 @@ export default function DecisionPage() {
                 <CardHeader>
                   <CardTitle className="text-xl">{choice.decision_title}</CardTitle>
                   <div className="text-base mt-2 text-muted-foreground">
-                    <MarkdownContent content={choice.decision_choice || choice.decision_description} />
+                    <MarkdownContent content={
+                      choice.decision_choice || 
+                      choice.decision_description || 
+                      choice.story_summary || 
+                      choice.result_summary || 
+                      'No content available'
+                    } />
                   </div>
                     </CardHeader>
                 <CardContent>
@@ -1431,124 +1225,6 @@ export default function DecisionPage() {
           </div>
         )}
 
-      {/* Impact Display - hide in public view */}
-      {!isPublicView && impactData && (
-        <div className="mt-8 mb-12 print:hidden">
-          <h2 className="text-2xl font-bold mb-4">Impact of Your Decision</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Health Card (Condition) - Always show */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center justify-between">
-                  Health
-                  {impactData.choice.condition !== 0 && (
-                    <Badge variant={impactData.choice.condition > 0 ? "default" : "destructive"}>
-                      {impactData.choice.condition > 0 ? '+' : ''}{Math.round(impactData.choice.condition * 100)}%
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="text-center">
-                    <div className="text-sm text-muted-foreground mb-1">
-                      {Math.round(impactData.oldStats.condition * 100)}% → {Math.round(impactData.newStats.condition * 100)}%
-                    </div>
-                    <div className="text-3xl font-bold mb-2">
-                      <span className={getStatusColor(impactData.newStats.condition)}>
-                        {Math.round(impactData.newStats.condition * 100)}%
-                      </span>
-                    </div>
-                  </div>
-                  <Progress 
-                    value={Math.round(impactData.newStats.condition * 100)} 
-                    className="h-3"
-                  />
-                  {impactData.choice.condition_description && (
-                    <p className="text-xs text-muted-foreground">
-                      {impactData.choice.condition_description}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Morale Card - Always show */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center justify-between">
-                  Morale
-                  {impactData.choice.morale !== 0 && (
-                    <Badge variant={impactData.choice.morale > 0 ? "default" : "destructive"}>
-                      {impactData.choice.morale > 0 ? '+' : ''}{Math.round(impactData.choice.morale * 100)}%
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="text-center">
-                    <div className="text-sm text-muted-foreground mb-1">
-                      {Math.round(impactData.oldStats.morale * 100)}% → {Math.round(impactData.newStats.morale * 100)}%
-                    </div>
-                    <div className="text-3xl font-bold mb-2">
-                      <span className={getStatusColor(impactData.newStats.morale)}>
-                        {Math.round(impactData.newStats.morale * 100)}%
-                      </span>
-                    </div>
-                  </div>
-                  <Progress 
-                    value={Math.round(impactData.newStats.morale * 100)} 
-                    className="h-3"
-                  />
-                  {impactData.choice.morale_description && (
-                    <p className="text-xs text-muted-foreground">
-                      {impactData.choice.morale_description}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-            
-            {/* Resources Card - Always show */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center justify-between">
-                  Resources
-                  {impactData.choice.resources !== 0 && (
-                    <Badge variant={impactData.choice.resources > 0 ? "default" : "destructive"}>
-                      {impactData.choice.resources > 0 ? '+' : ''}{impactData.choice.resources}
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="text-center">
-                    <div className="text-sm text-muted-foreground mb-1">
-                      {Math.round(impactData.oldStats.resources)} → {Math.round(impactData.newStats.resources)}
-                    </div>
-                    <div className="text-3xl font-bold mb-2">
-                      <span className={getStatusColor(impactData.newStats.resources)}>
-                        {Math.round(impactData.newStats.resources)}
-                      </span>
-                    </div>
-                  </div>
-                  <Progress 
-                    value={(impactData.newStats.resources / 150) * 100} 
-                    className="h-3"
-                  />
-                  {impactData.choice.resources_description && (
-                    <p className="text-xs text-muted-foreground">
-                      {impactData.choice.resources_description}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
 
       {/* Return to Dashboard Button - hide in public view */}
       {!isPublicView && (
