@@ -1,5 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
+import { Suspense } from "react"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import "./globals.css"
@@ -24,9 +25,13 @@ export default function RootLayout({
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className={GeistSans.className}>
         <ClientSessionProvider>
-          <ConditionalLayout>
-            {children}
-          </ConditionalLayout>
+          <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          </div>}>
+            <ConditionalLayout>
+              {children}
+            </ConditionalLayout>
+          </Suspense>
           <Toaster />
         </ClientSessionProvider>
       </body>

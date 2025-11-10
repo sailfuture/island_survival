@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useEffect } from "react"
+import { useEffect, Suspense } from "react"
 import { Navigation } from "./navigation"
 import { useCurrentUser } from "@/hooks/use-current-user"
 
@@ -45,7 +45,9 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   
   return (
     <>
-      <Navigation />
+      <Suspense fallback={<div className="h-16 border-b bg-white" />}>
+        <Navigation />
+      </Suspense>
       {children}
     </>
   )
