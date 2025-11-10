@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, Suspense } from "react"
 import { Navigation } from "./navigation"
 import { useCurrentUser } from "@/hooks/use-current-user"
+import { Spinner } from "@/components/ui/spinner"
 
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -33,7 +34,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   if (!isDevelopment && !isPublicView && isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        <Spinner className="h-8 w-8" />
       </div>
     )
   }

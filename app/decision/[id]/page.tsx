@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { toast } from "sonner"
 import { useSession } from "next-auth/react"
 import { DecisionConfirmationModal } from "@/components/decision-confirmation-modal"
@@ -846,56 +846,10 @@ export default function DecisionPage() {
 
   if (loading || sessionStatus === 'loading' || !decisionData) {
     return (
-      <div className="container mx-auto p-6 max-w-6xl">
-        {/* Hero Image Skeleton */}
-        <div className="relative w-full h-64 md:h-96 mb-6 rounded-lg overflow-hidden">
-          <Skeleton className="w-full h-full" />
-        </div>
-
-        {/* Main Story Card Skeleton */}
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              <Skeleton className="h-6 w-3/4" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-5/6" />
-              <Skeleton className="h-4 w-4/5" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Choice Cards Skeleton */}
-        <div className="mb-6">
-          <Skeleton className="h-8 w-48 mb-4" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-6 w-3/4" />
-                <Skeleton className="h-4 w-full mt-2" />
-                <Skeleton className="h-4 w-2/3" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-10 w-full" />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-6 w-3/4" />
-                <Skeleton className="h-4 w-full mt-2" />
-                <Skeleton className="h-4 w-2/3" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-10 w-full" />
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Return Button Skeleton */}
-        <div className="mt-8">
-          <Skeleton className="h-12 w-full max-w-xs mx-auto" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Spinner className="h-8 w-8 mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">Loading decision...</p>
         </div>
       </div>
     )

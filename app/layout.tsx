@@ -10,6 +10,7 @@ import { Toaster } from "sonner" // Import Toaster from sonner
 // import { AuthGuard } from "@/components/auth-guard"
 import { ConditionalLayout } from "@/components/conditional-layout"
 import { ClientSessionProvider } from "@/components/session-provider"
+import { Spinner } from "@/components/ui/spinner"
 
 export const metadata: Metadata = {
   title: "Edge of Survival",
@@ -25,9 +26,11 @@ export default function RootLayout({
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className={GeistSans.className}>
         <ClientSessionProvider>
-          <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-          </div>}>
+          <Suspense fallback={
+            <div className="min-h-screen bg-background flex items-center justify-center">
+              <Spinner className="h-8 w-8" />
+            </div>
+          }>
             <ConditionalLayout>
               {children}
             </ConditionalLayout>

@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import { MarkdownContent } from "@/components/markdown-content"
 import { Item, ItemGroup, ItemContent, ItemTitle, ItemDescription, ItemActions } from "@/components/ui/item"
+import { Spinner } from "@/components/ui/spinner"
 
 interface UserDecision {
   id: number
@@ -216,20 +217,10 @@ export default function StoryPage() {
 
   if (loading || isUserLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-6 py-8 max-w-7xl">
-          <Skeleton className="h-9 w-64 mb-3" />
-          <Skeleton className="h-4 w-96 mb-8" />
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-24" />
-            ))}
-          </div>
-          <div className="grid gap-4 md:grid-cols-3 mb-8">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-32" />
-            ))}
-          </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Spinner className="h-8 w-8 mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">Loading story...</p>
         </div>
       </div>
     )
