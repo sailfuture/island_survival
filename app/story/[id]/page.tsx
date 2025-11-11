@@ -6,12 +6,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
-import { ChevronRight, BookOpen } from "lucide-react"
+import { ChevronRight, BookOpen, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import { MarkdownContent } from "@/components/markdown-content"
 import { Item, ItemGroup, ItemContent, ItemTitle, ItemDescription, ItemActions } from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface UserDecision {
   id: number
@@ -84,6 +94,8 @@ export default function StoryPage() {
   })
   const [loading, setLoading] = useState(true)
   const [activeDecisionId, setActiveDecisionId] = useState<string | null>(null)
+  const [showResetDialog, setShowResetDialog] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
 
   useEffect(() => {
     if (!isUserLoading && storyId && effectiveEmail) {
@@ -115,9 +127,6 @@ export default function StoryPage() {
       }
 
       if (effectiveEmail) {
-        // Create new story instance for user if needed
-        await fetch(`${XANO_BASE_URL}/create_new_story?user_email=${encodeURIComponent(effectiveEmail)}&stories_id=${storyId}`)
-
         // Fetch ALL user's score records (complete decision history)
         const userAllScoresUrl = `${XANO_BASE_URL}/user_all_scores?user_email=${encodeURIComponent(effectiveEmail)}&stories_id=${storyId}`
         const userAllScoresResponse = await fetch(userAllScoresUrl)
@@ -213,6 +222,88 @@ export default function StoryPage() {
   const handleDecisionClick = (decision: UserDecision) => {
     // Navigate using decision_id with historical stats and score_record_id
     router.push(`/decision/${encodeURIComponent(decision.decision_id)}?morale=${decision.morale_after}&resources=${decision.resources_after}&condition=${decision.shipcondition_after}&user_email=${encodeURIComponent(effectiveEmail || '')}&stories_id=${storyId}&score_record_id=${decision.id}`)
+  }
+
+  const handleResetStory = () => {
+    setShowResetDialog(true)
+  }
+
+  const handleStartStory = async () => {
+    if (!effectiveEmail) {
+      toast.error("Please log in to start the story")
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      console.log('🎬 Starting new story for user:', effectiveEmail, 'stories_id:', storyId)
+      const startUrl = `${XANO_BASE_URL}/start_new_story?user_email=${encodeURIComponent(effectiveEmail)}&stories_id=${storyId}`
+      console.log('🎬 Start URL:', startUrl)
+      
+      const startResponse = await fetch(startUrl)
+      
+      console.log('🎬 Start response status:', startResponse.status)
+      
+      if (startResponse.ok) {
+        const responseData = await startResponse.json()
+        console.log('✅ Story started successfully:', responseData)
+        toast.success("Story started!")
+        
+        // Navigate to START decision
+        router.push(`/decision/START?stories_id=${storyId}&user_email=${encodeURIComponent(effectiveEmail)}`)
+      } else {
+        const errorText = await startResponse.text()
+        console.error('❌ Start failed with status:', startResponse.status, 'Error:', errorText)
+        toast.error(`Failed to start story: ${startResponse.status}`)
+        setLoading(false)
+      }
+    } catch (error) {
+      console.error('❌ Error starting story:', error)
+      toast.error('Failed to start story. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  const confirmReset = async () => {
+    if (!effectiveEmail) {
+      toast.error("Please log in to reset your story")
+      return
+    }
+
+    setIsResetting(true)
+    setShowResetDialog(false)
+
+    try {
+      console.log('🔄 Resetting story for user:', effectiveEmail, 'stories_id:', storyId)
+      const resetUrl = `${XANO_BASE_URL}/start_new_story?user_email=${encodeURIComponent(effectiveEmail)}&stories_id=${storyId}`
+      console.log('🔄 Reset URL:', resetUrl)
+      
+      const resetResponse = await fetch(resetUrl)
+      
+      console.log('🔄 Reset response status:', resetResponse.status)
+      console.log('🔄 Reset response ok:', resetResponse.ok)
+      
+      if (resetResponse.ok) {
+        const responseData = await resetResponse.json()
+        console.log('✅ Story reset successfully, response:', responseData)
+        toast.success("Story reset! Starting fresh...")
+        
+        // Reload the page to fetch fresh data
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
+      } else {
+        const errorText = await resetResponse.text()
+        console.error('❌ Reset failed with status:', resetResponse.status, 'Error:', errorText)
+        toast.error(`Failed to reset story: ${resetResponse.status}`)
+        setIsResetting(false)
+      }
+    } catch (error) {
+      console.error('❌ Error resetting story:', error)
+      toast.error('Failed to reset story. Please try again.')
+      setIsResetting(false)
+    }
   }
 
   if (loading || isUserLoading) {
@@ -330,13 +421,46 @@ export default function StoryPage() {
 
         {/* Decision Journey */}
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Decision History</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Decision History</h2>
+            {userMadeDecisions.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetStory}
+                disabled={isResetting}
+                className="text-destructive hover:text-destructive"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reset Story
+              </Button>
+            )}
+          </div>
           {userMadeDecisions.length === 0 ? (
             <Card className="border shadow-sm">
               <CardContent className="text-center py-12">
                 <BookOpen className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-base font-semibold mb-1">No decisions yet</h3>
-                <p className="text-sm text-muted-foreground">Start your survival journey!</p>
+                <h3 className="text-base font-semibold mb-2">Ready to Begin?</h3>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Start your survival journey and make your first critical decision.
+                </p>
+                <Button
+                  onClick={handleStartStory}
+                  size="lg"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Spinner className="h-4 w-4 mr-2" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <BookOpen className="h-4 w-4 mr-2" />
+                      Start Story
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -383,6 +507,45 @@ export default function StoryPage() {
         </div>
 
       </div>
+      
+      {/* Reset Story Confirmation Dialog */}
+      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Your Story Progress?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all your decisions and progress for this story. You will start from the beginning.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="my-4">
+            <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+              <li>All decision records will be deleted</li>
+              <li>You'll return to the starting point</li>
+              <li>Your crew settings will be preserved</li>
+            </ul>
+            <p className="mt-4 text-sm font-semibold text-destructive">
+              This action cannot be undone.
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmReset}
+              disabled={isResetting}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isResetting ? (
+                <>
+                  <Spinner className="h-4 w-4 mr-2" />
+                  Resetting...
+                </>
+              ) : (
+                'Yes, Reset Story'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

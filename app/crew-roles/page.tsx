@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import Image from "next/image"
 import { toast } from "sonner"
 import { useCurrentUser } from "@/hooks/use-current-user"
-import { Edit, Check, X } from "lucide-react"
+import { Edit, Check, X, Share2 } from "lucide-react"
 import { getStoryFromUrl, getStoryConfig } from "@/lib/story-config"
 import { createApiService } from "@/lib/api-service"
 import { Spinner } from "@/components/ui/spinner"
@@ -264,6 +264,18 @@ export default function CrewRolesPage() {
     }
   }
 
+  const handleCopyPublicLink = () => {
+    if (!userEmail) {
+      toast.error("Please log in to share your crew roster")
+      return
+    }
+
+    const publicUrl = `${window.location.origin}/crew-roles/public?user_email=${encodeURIComponent(userEmail)}&stories_id=${storiesId}`
+    navigator.clipboard.writeText(publicUrl)
+    toast.success('Public link copied to clipboard!')
+    console.log('📋 Copied public crew roles link:', publicUrl)
+  }
+
   const removeAssignment = async () => {
     if (!assignmentDialog.roleKey || !userEmail || !userSettings?.id) {
       toast.error("Unable to remove assignment")
@@ -337,10 +349,25 @@ export default function CrewRolesPage() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight mb-2">{storyConfig.theme.terminology.crew} Roles & Student Assignments</h1>
-          <p className="text-muted-foreground">
-            Assign students to each survival role. Each role has unique bonuses and penalties that affect the story.
-          </p>
+          <div className="flex items-start justify-between gap-4 mb-2">
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold tracking-tight mb-2">{storyConfig.theme.terminology.crew} Roles & Student Assignments</h1>
+              <p className="text-muted-foreground">
+                Assign students to each survival role. Each role has unique bonuses and penalties that affect the story.
+              </p>
+            </div>
+            {userEmail && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyPublicLink}
+                className="flex-shrink-0"
+              >
+                <Share2 className="h-4 w-4 mr-2" />
+                Share Roster
+              </Button>
+            )}
+          </div>
         </div>
 
 

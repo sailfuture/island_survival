@@ -18,15 +18,16 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   // Check if this is a public view (no authentication required)
   const isPublicView = searchParams.get('public') === 'true'
   
-  // Redirect unauthenticated users to login page (skip in development or public view)
+  // Redirect unauthenticated users to login page (skip in development, public view, or public crew roles)
   useEffect(() => {
-    if (!isDevelopment && !isPublicView && !isLoading && !isAuthenticated && pathname !== "/login" && pathname !== "/access-denied") {
+    if (!isDevelopment && !isPublicView && !isLoading && !isAuthenticated && 
+        pathname !== "/login" && pathname !== "/access-denied" && pathname !== "/crew-roles/public") {
       router.push("/login")
     }
   }, [isAuthenticated, isLoading, pathname, router, isDevelopment, isPublicView])
   
-  // Don't show navigation on login page, access denied page, or public view
-  if (pathname === "/login" || pathname === "/access-denied" || isPublicView) {
+  // Don't show navigation on login page, access denied page, public view, or public crew roles
+  if (pathname === "/login" || pathname === "/access-denied" || pathname === "/crew-roles/public" || isPublicView) {
     return <>{children}</>
   }
   
@@ -39,8 +40,9 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
     )
   }
   
-  // Don't render content if not authenticated (skip in development or public view)
-  if (!isDevelopment && !isPublicView && !isAuthenticated) {
+  // Don't render content if not authenticated (skip in development, public view, or public crew roles)
+  const isPublicCrewRoles = pathname === "/crew-roles/public"
+  if (!isDevelopment && !isPublicView && !isPublicCrewRoles && !isAuthenticated) {
     return null
   }
   

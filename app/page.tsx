@@ -24,6 +24,7 @@ export default function HomePage() {
   const { email: userEmail, isLoading: isUserLoading } = useCurrentUser()
   const [stories, setStories] = useState<Story[]>([])
   const [loading, setLoading] = useState(true)
+  const [initializingStory, setInitializingStory] = useState(false)
 
   useEffect(() => {
     async function loadStories() {
@@ -41,16 +42,44 @@ export default function HomePage() {
     loadStories()
   }, [])
 
-  const handleStoryClick = (storyId: number) => {
+  const handleStoryClick = async (storyId: number) => {
+    setInitializingStory(true)
+    
+    // Call create_new_story before navigating to initialize the story for this user
+    if (userEmail) {
+      try {
+        const XANO_BASE_URL = "https://xsc3-mvx7-r86m.n7e.xano.io/api:7l5S8ZC7"
+        console.log('🎬 Creating new story instance for user:', userEmail, 'story:', storyId)
+        
+        const createResponse = await fetch(`${XANO_BASE_URL}/create_new_story?user_email=${encodeURIComponent(userEmail)}&stories_id=${storyId}`)
+        
+        console.log('🎬 Create story response status:', createResponse.status)
+        
+        if (createResponse.ok) {
+          const responseData = await createResponse.json()
+          console.log('✅ Story instance created:', responseData)
+        } else {
+          const errorText = await createResponse.text()
+          console.warn('⚠️ Create story returned non-ok status:', createResponse.status, errorText)
+          // Continue anyway - might already exist
+        }
+      } catch (error) {
+        console.error('❌ Error creating story instance:', error)
+        // Continue to navigation even if this fails
+      }
+    }
+    
     router.push(`/story/${storyId}`)
   }
 
-  if (loading || isUserLoading) {
+  if (loading || isUserLoading || initializingStory) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Spinner className="h-8 w-8 mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground">Loading stories...</p>
+          <p className="text-sm text-muted-foreground">
+            {initializingStory ? 'Starting your adventure...' : 'Loading stories...'}
+          </p>
         </div>
       </div>
     )
@@ -83,8 +112,10 @@ export default function HomePage() {
             {stories.map((story) => (
               <Card 
                 key={story.id} 
-                className="cursor-pointer transition-all hover:shadow-xl border-0 shadow-md group overflow-hidden"
-                onClick={() => handleStoryClick(story.id)}
+                className={`transition-all hover:shadow-xl border-0 shadow-md group overflow-hidden ${
+                  initializingStory ? 'opacity-50 cursor-wait' : 'cursor-pointer'
+                }`}
+                onClick={() => !initializingStory && handleStoryClick(story.id)}
               >
                 {/* Story Image Hero */}
                 {story.storyImage ? (
