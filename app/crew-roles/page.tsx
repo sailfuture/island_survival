@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -15,6 +14,7 @@ import { useCurrentUser } from "@/hooks/use-current-user"
 import { Edit, Check, X } from "lucide-react"
 import { getStoryFromUrl, getStoryConfig } from "@/lib/story-config"
 import { createApiService } from "@/lib/api-service"
+import { Spinner } from "@/components/ui/spinner"
 
 interface CrewRole {
   id: number
@@ -100,8 +100,10 @@ export default function CrewRolesPage() {
         
         // Fetch user settings if user is logged in
         if (userEmail) {
-          console.log('Fetching settings for story:', currentStory, 'user:', userEmail, 'stories_id:', storiesId)
+          console.log('🔍 Fetching settings for user:', userEmail, 'stories_id:', storiesId)
           const settingsData = await apiService.getSettings(storiesId, userEmail)
+          console.log('🔍 Raw settings response:', settingsData)
+          console.log('🔍 Is array?', Array.isArray(settingsData))
           
           // Find current user's settings - filter by both email AND stories_id
           const userSettingsArray = Array.isArray(settingsData)
@@ -111,18 +113,28 @@ export default function CrewRolesPage() {
               )
             : (settingsData.email === userEmail && settingsData.stories_id === storiesId) ? [settingsData] : []
           
-          console.log('Filtered settings for', userEmail, 'story', storiesId, ':', userSettingsArray)
+          console.log('🔍 Filtered settings count:', userSettingsArray.length)
+          console.log('🔍 Filtered settings:', userSettingsArray)
 
           if (userSettingsArray.length > 0) {
             const latestSettings = userSettingsArray.reduce((latest: UserSettings, current: UserSettings) => {
               return (current.id || 0) > (latest.id || 0) ? current : latest
             })
             
-            console.log('Found user settings:', {
+            console.log('✅ Found user settings:', {
               id: latestSettings.id,
               email: latestSettings.email,
-              hasRoleFields: Object.keys(latestSettings).filter(k => k.startsWith('role_')).length
+              stories_id: latestSettings.stories_id,
+              role_fields: Object.keys(latestSettings).filter(k => k.startsWith('role_'))
             })
+            
+            // Log all role values
+            console.log('📋 Role values from database:')
+            for (let i = 1; i <= 12; i++) {
+              const roleKey = `role_${i}` as keyof UserSettings
+              const value = latestSettings[roleKey]
+              console.log(`  role_${i}: "${value}"`)
+            }
             
             setUserSettings(latestSettings)
             
@@ -132,16 +144,14 @@ export default function CrewRolesPage() {
               const roleKey = `role_${i}` as keyof UserSettings
               const studentName = (latestSettings[roleKey] as string) || ''
               assignments[`role_${i}`] = studentName
-              
-              if (studentName) {
-                console.log(`Pre-filled role_${i} with student:`, studentName)
-              }
             }
             setStudentAssignments(assignments)
             
-            console.log('Loaded user settings and student assignments:', latestSettings)
-            console.log('Student assignments initialized:', assignments)
-            console.log('Non-empty assignments:', Object.entries(assignments).filter(([key, value]) => value.trim() !== ''))
+            console.log('✅ Student assignments initialized with', Object.entries(assignments).filter(([k, v]) => v.trim() !== '').length, 'assigned students')
+            console.log('📋 Assigned students:', Object.entries(assignments)
+              .filter(([k, v]) => v.trim() !== '')
+              .map(([k, v]) => `${k}: ${v}`)
+            )
           } else {
             console.log('No user settings found for:', userEmail)
           }
@@ -153,7 +163,7 @@ export default function CrewRolesPage() {
       }
     }
     fetchData()
-  }, [userEmail, currentStory])
+  }, [userEmail, currentStory, storiesId])
 
   const handleStudentAssignment = (roleNumber: number, studentName: string) => {
     // Fix the key generation - ensure we only have one "role_" prefix
@@ -221,6 +231,7 @@ export default function CrewRolesPage() {
         crew_captain_name: userSettings.crew_captain_name || '',
         vessel_name: userSettings.vessel_name || '',
         island_survival_settings_id: userSettings.id,
+        stories_id: storiesId,
         // Include all role assignments
         role_1: currentAssignments.role_1 || '',
         role_2: currentAssignments.role_2 || '',
@@ -236,12 +247,17 @@ export default function CrewRolesPage() {
         role_12: currentAssignments.role_12 || '',
       }
 
-      console.log('Individual assignment save payload:', updatePayload)
+      console.log('💾 Saving assignment to database...')
+      console.log('💾 Payload:', updatePayload)
+      console.log('💾 Non-empty roles:', Object.entries(currentAssignments)
+        .filter(([k, v]) => v.trim() !== '')
+        .map(([k, v]) => `${k}: ${v}`)
+      )
 
       const updatedSettings = await apiService.updateSettingsGeneral(updatePayload)
       setUserSettings(updatedSettings)
       toast.success("Assignment saved successfully!")
-      console.log('Assignment saved to database:', updatedSettings)
+      console.log('✅ Save response:', updatedSettings)
     } catch (error) {
       console.error('Error saving assignment:', error)
       toast.error('Failed to save assignment. Please try again.')
@@ -276,6 +292,7 @@ export default function CrewRolesPage() {
         crew_captain_name: userSettings.crew_captain_name || '',
         vessel_name: userSettings.vessel_name || '',
         island_survival_settings_id: userSettings.id,
+        stories_id: storiesId,
         // Include all role assignments
         role_1: currentAssignments.role_1 || '',
         role_2: currentAssignments.role_2 || '',
@@ -291,12 +308,13 @@ export default function CrewRolesPage() {
         role_12: currentAssignments.role_12 || '',
       }
 
-      console.log('Individual assignment removal payload:', updatePayload)
+      console.log('🗑️ Removing assignment from database...')
+      console.log('🗑️ Payload:', updatePayload)
 
       const updatedSettings = await apiService.updateSettingsGeneral(updatePayload)
       setUserSettings(updatedSettings)
       toast.success("Assignment removed successfully!")
-      console.log('Assignment removed from database:', updatedSettings)
+      console.log('✅ Remove response:', updatedSettings)
     } catch (error) {
       console.error('Error removing assignment:', error)
       toast.error('Failed to remove assignment. Please try again.')
@@ -306,17 +324,10 @@ export default function CrewRolesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-8">
-          <div className="mb-8">
-            <Skeleton className="h-8 w-64 mb-2" />
-            <Skeleton className="h-4 w-96" />
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-[500px]" />
-            ))}
-          </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Spinner className="h-8 w-8 mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">Loading crew roles...</p>
         </div>
       </div>
     )
@@ -352,6 +363,11 @@ export default function CrewRolesPage() {
                     : `role_${role.role_number}`
                   const currentValue = studentAssignments[roleKey] || ''
                   const hasStudent = currentValue.trim() !== ''
+
+                  // Debug badge display
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log(`🏷️ Badge for ${role.name}: roleKey=${roleKey}, value="${currentValue}", hasStudent=${hasStudent}`)
+                  }
 
                   return hasStudent ? (
                     <div className="absolute top-2 left-2">
