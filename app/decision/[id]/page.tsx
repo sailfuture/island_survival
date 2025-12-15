@@ -194,7 +194,12 @@ export default function DecisionPage() {
         
         // Fallback to stories_individual if previous_story didn't work
         if (!storyData) {
-          const url = `${XANO_BASE_URL}/stories_individual?story_id_name=${encodeURIComponent(decisionId)}&stories_id=${storiesId}&user_email=${encodeURIComponent(effectiveEmail)}`
+          // Don't send user_email for guest/public views - API might not accept it
+          const url = isPublicView || effectiveEmail === 'guest'
+            ? `${XANO_BASE_URL}/stories_individual?story_id_name=${encodeURIComponent(decisionId)}&stories_id=${storiesId}`
+            : `${XANO_BASE_URL}/stories_individual?story_id_name=${encodeURIComponent(decisionId)}&stories_id=${storiesId}&user_email=${encodeURIComponent(effectiveEmail)}`
+          
+          console.log('Fetching story, URL:', url)
           
           const response = await fetch(url, {
             method: 'GET',
@@ -205,6 +210,8 @@ export default function DecisionPage() {
           
           if (response.ok) {
             storyData = await response.json()
+          } else {
+            console.error('Failed to fetch story:', response.status, await response.text())
           }
         }
         
